@@ -1,0 +1,6 @@
+{
+  "name": "YIFA Farms - Kaduna, Nigeria",
+  "description": "Premium agricultural enterprise in Kaduna, Nigeria specializing in fresh poultry, eggs, vegetables, and frozen chicken.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

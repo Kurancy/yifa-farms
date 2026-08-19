@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useFarmConfig } from '../../context/FarmConfigContext';
+import { useToast } from '../../context/ToastContext';
 import { CustomerAccount } from '../../types';
 import {
   Users,
@@ -31,6 +32,7 @@ export const AdminCustomersPage: React.FC = () => {
     orders,
     currentStaffUser
   } = useFarmConfig();
+  const toast = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTierFilter, setSelectedTierFilter] = useState<string>('all');
@@ -75,39 +77,53 @@ export const AdminCustomersPage: React.FC = () => {
 
   const handleCreateCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName || !newPhone) return;
+    if (!newName.trim() || !newPhone.trim()) {
+      toast.error('Customer name and phone number are required.', 'Missing Fields');
+      return;
+    }
 
-    addCustomer({
-      name: newName,
-      phone: newPhone,
-      email: newEmail || undefined,
-      customerType: newType,
-      address: newAddress || 'Kaduna Central, Nigeria',
-      savedAddresses: newAddress ? [newAddress] : ['Kaduna Central, Nigeria'],
-      ordersCount: 0,
-      totalSpent: 0,
-      loyaltyTier: 'Bronze',
-      loyaltyPoints: 0,
-      notes: newNotes || undefined,
-      lastOrderDate: 'Never'
-    });
+    try {
+      addCustomer({
+        name: newName.trim(),
+        phone: newPhone.trim(),
+        email: newEmail.trim() || undefined,
+        customerType: newType,
+        address: newAddress.trim() || 'Kaduna Central, Nigeria',
+        savedAddresses: newAddress ? [newAddress.trim()] : ['Kaduna Central, Nigeria'],
+        ordersCount: 0,
+        totalSpent: 0,
+        loyaltyTier: 'Bronze',
+        loyaltyPoints: 0,
+        notes: newNotes.trim() || undefined,
+        lastOrderDate: 'Never'
+      });
 
-    setIsNewCustomerModalOpen(false);
-    setNewName('');
-    setNewPhone('');
-    setNewEmail('');
-    setNewAddress('');
-    setNewNotes('');
+      toast.success(`Registered new customer profile for ${newName.trim()}.`, 'Customer Created');
+      setIsNewCustomerModalOpen(false);
+      setNewName('');
+      setNewPhone('');
+      setNewEmail('');
+      setNewAddress('');
+      setNewNotes('');
+    } catch {
+      toast.error('Failed to create customer profile.', 'Error');
+    }
   };
 
   const handleAwardPoints = (customerId: string) => {
     if (!pointsAdjustDelta) return;
-    awardLoyaltyPoints(customerId, pointsAdjustDelta, pointsAdjustReason);
-    if (selectedCustomerForDetail && selectedCustomerForDetail.id === customerId) {
-      setSelectedCustomerForDetail(prev => prev ? {
-        ...prev,
-        loyaltyPoints: Math.max(0, prev.loyaltyPoints + pointsAdjustDelta)
-      } : null);
+    try {
+      awardLoyaltyPoints(customerId, pointsAdjustDelta, pointsAdjustReason);
+      const sign = pointsAdjustDelta >= 0 ? `+${pointsAdjustDelta}` : `${pointsAdjustDelta}`;
+      toast.success(`Applied ${sign} loyalty rewards points.`, 'Points Adjusted');
+      if (selectedCustomerForDetail && selectedCustomerForDetail.id === customerId) {
+        setSelectedCustomerForDetail(prev => prev ? {
+          ...prev,
+          loyaltyPoints: Math.max(0, prev.loyaltyPoints + pointsAdjustDelta)
+        } : null);
+      }
+    } catch {
+      toast.error('Failed to update loyalty points balance.', 'Error');
     }
   };
 
@@ -340,9 +356,21 @@ export const AdminCustomersPage: React.FC = () => {
                           {currentStaffUser?.role === 'admin' && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (window.confirm(`Delete customer profile for ${cust.name}?`)) {
-                                  deleteCustomer(cust.id);
+                              onClick={async () => {
+                                const proceed = await toast.confirmAction({
+                                  title: 'Delete Customer Profile',
+                                  message: `Are you sure you want to permanently delete the profile and order history for ${cust.name}?`,
+                                  confirmText: 'Delete Profile',
+                                  cancelText: 'Cancel',
+                                  type: 'danger'
+                                });
+                                if (proceed) {
+                                  try {
+                                    deleteCustomer(cust.id);
+                                    toast.success(`Customer profile for ${cust.name} deleted.`, 'Profile Removed');
+                                  } catch {
+                                    toast.error('Failed to delete customer profile.', 'Error');
+                                  }
                                 }
                               }}
                               className="p-2 rounded-xl bg-white/5 hover:bg-rose-500 hover:text-white text-rose-400 border border-white/10"

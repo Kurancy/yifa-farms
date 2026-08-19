@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFarmConfig } from '../../context/FarmConfigContext';
+import { useToast } from '../../context/ToastContext';
 import { UnifiedOrder, OrderItem } from '../../types';
 import { X, Plus, Trash2, ShoppingCart, User, MapPin, Phone, CreditCard } from 'lucide-react';
 
@@ -10,6 +11,7 @@ interface AdminOrderModalProps {
 
 export const AdminOrderModal: React.FC<AdminOrderModalProps> = ({ isOpen, onClose }) => {
   const { inventory, addOrder } = useFarmConfig();
+  const toast = useToast();
 
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
@@ -60,13 +62,20 @@ export const AdminOrderModal: React.FC<AdminOrderModalProps> = ({ isOpen, onClos
   };
 
   const handleRemoveItem = (index: number) => {
-    if (items.length <= 1) return;
+    if (items.length <= 1) {
+      toast.warning('An order must have at least one product item.', 'Item Required');
+      return;
+    }
     setItems(items.filter((_, i) => i !== index));
   };
 
   const handleProductChange = (index: number, productId: string) => {
     const selected = inventory.find(inv => inv.productId === productId || inv.id === productId);
     if (!selected) return;
+
+    if (selected.currentStock <= 0) {
+      toast.warning(`Note: "${selected.name}" is currently at 0 stock in warehouse.`, 'Low Stock Warning');
+    }
 
     const newItems = [...items];
     newItems[index] = {
@@ -97,30 +106,43 @@ export const AdminOrderModal: React.FC<AdminOrderModalProps> = ({ isOpen, onClos
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName || items.length === 0) return;
+    if (!customerName.trim()) {
+      toast.error('Please specify customer name or business.', 'Missing Name');
+      return;
+    }
+    if (items.length === 0) {
+      toast.error('Please add at least one produce item.', 'Empty Order');
+      return;
+    }
 
     setIsSubmitting(true);
-    await addOrder({
-      customerName,
-      phone,
-      whatsapp: phone,
-      email,
-      customerType,
-      deliveryAddress,
-      items,
-      subtotal,
-      discount,
-      deliveryFee,
-      totalAmount,
-      status: 'confirmed',
-      paymentStatus,
-      paymentMethod,
-      notes: notes || 'Walk-in / Direct Farm Gate Order',
-      source: 'admin_manual'
-    });
+    try {
+      const newOrd = await addOrder({
+        customerName: customerName.trim(),
+        phone: phone.trim() || '080-WALK-IN',
+        whatsapp: phone.trim() || '080-WALK-IN',
+        email: email.trim() || undefined,
+        customerType,
+        deliveryAddress: deliveryAddress.trim() || 'Kaduna Central Pick-up / Delivery',
+        items,
+        subtotal,
+        discount,
+        deliveryFee,
+        totalAmount,
+        status: 'confirmed',
+        paymentStatus,
+        paymentMethod,
+        notes: notes || 'Walk-in / Direct Farm Gate Order',
+        source: 'admin_manual'
+      });
 
-    setIsSubmitting(false);
-    onClose();
+      toast.success(`Logged Order #${newOrd.id} for ${customerName}. Stock updated.`, 'Order Recorded');
+      setIsSubmitting(false);
+      onClose();
+    } catch {
+      toast.error('Failed to log order to database.', 'Submission Failed');
+      setIsSubmitting(false);
+    }
   };
 
   return (

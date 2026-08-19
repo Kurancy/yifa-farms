@@ -1,6 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFarmConfig } from '../context/FarmConfigContext';
-import { Phone, MessageCircle, Mail, MapPin, Clock, Truck, ShieldCheck, ExternalLink } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import {
+  Phone,
+  MessageCircle,
+  Mail,
+  MapPin,
+  Clock,
+  Truck,
+  ShieldCheck,
+  ExternalLink,
+  Send,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 import { ClientConfirmBadge } from './ClientConfirmBadge';
 
 interface ContactSectionProps {
@@ -8,11 +21,84 @@ interface ContactSectionProps {
 }
 
 export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenQuote }) => {
-  const { config } = useFarmConfig();
+  const { config, submitInquiry } = useFarmConfig();
+  const toast = useToast();
+
+  // Interactive Inquiry Form State
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [subject, setSubject] = useState('Farm Produce Inquiry / Supply Request');
+  const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedInquiryId, setSubmittedInquiryId] = useState<string | null>(null);
 
   const whatsappDirect = `https://wa.me/${config.whatsappNumber}?text=${encodeURIComponent(
     `Hello YIFA Farms Kaduna, I would like to inquire about ordering fresh eggs, poultry, and vegetables.`
   )}`;
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !phone.trim()) {
+      toast.error('Please fill in your Name and Phone number.', 'Incomplete Fields');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const inq = await submitInquiry({
+        fullName: name.trim(),
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        channel: 'contact_form',
+        subject: subject.trim() || 'General Inquiry',
+        message: message.trim() || 'Customer submitted contact inquiry via storefront website form.',
+        priority: 'high'
+      });
+
+      setSubmittedInquiryId(inq.id);
+      toast.success('Your message has been sent to YIFA Farms Kaduna. Our sales desk will respond shortly.', 'Message Sent');
+    } catch {
+      toast.error('We encountered a problem sending your inquiry. Please try again or message our WhatsApp line.', 'Transmission Error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSendViaWhatsApp = async () => {
+    if (!name.trim() || !phone.trim()) {
+      toast.error('Please provide your Name and Phone number before launching WhatsApp.', 'Contact Details Needed');
+      return;
+    }
+
+    try {
+      // Log in database
+      await submitInquiry({
+        fullName: name.trim(),
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        channel: 'whatsapp',
+        subject: subject.trim() || 'WhatsApp Inquiry',
+        message: message.trim() || 'Customer initiated WhatsApp message from website contact form.',
+        priority: 'high'
+      });
+
+      toast.info('Connecting to YIFA Farms Kaduna WhatsApp desk...', 'WhatsApp Chat');
+
+      const text =
+        `*YIFA FARMS INQUIRY*\n` +
+        `👤 Name: ${name.trim()}\n` +
+        `📞 Phone: ${phone.trim()}\n` +
+        (email ? `✉️ Email: ${email.trim()}\n` : '') +
+        `📌 Subject: ${subject}\n` +
+        (message ? `📝 Message: ${message.trim()}\n` : '');
+
+      window.open(`https://wa.me/${config.whatsappNumber}?text=${encodeURIComponent(text)}`, '_blank');
+    } catch {
+      toast.error('Failed to log WhatsApp lead. Launching direct chat...', 'Notice');
+      window.open(whatsappDirect, '_blank');
+    }
+  };
 
   return (
     <section id="contact" className="pt-2 pb-20 sm:pt-4 sm:pb-24 bg-transparent text-[#FDFBF5] relative overflow-hidden">
@@ -60,13 +146,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenQuote }) =
               className="px-7 py-4 rounded-full bg-white/10 hover:bg-white/15 text-[#FDFBF5] border border-white/10 font-bold text-xs sm:text-sm uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer backdrop-blur-sm"
             >
               <Mail className="w-4 h-4" />
-              <span>Send an Inquiry</span>
+              <span>Open Quote Engine</span>
             </button>
           </div>
         </div>
 
         {/* Contact Information & Map Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch mb-12">
           {/* Contact Details Cards (5 cols) */}
           <div className="lg:col-span-5 space-y-4 flex flex-col justify-between">
             {/* Address Card */}
@@ -197,6 +283,144 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenQuote }) =
             </div>
           </div>
         </div>
+
+        {/* Live Integrated Customer Message & Inquiry Form */}
+        <div className="bg-[#0A2217] rounded-3xl p-6 sm:p-10 border border-[#D4AF37]/20 shadow-2xl relative overflow-hidden">
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] text-xs font-bold uppercase tracking-wider mb-2">
+                <Mail className="w-3.5 h-3.5" />
+                <span>Instant Operations Dispatch Inbox</span>
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
+                Send Direct Message to Abubakar Ibrahim & Sales Desk
+              </h3>
+              <p className="text-xs sm:text-sm text-[#FDFBF5]/70 mt-2">
+                All submissions are received instantly in our operations dashboard with audio notification for immediate fulfillment.
+              </p>
+            </div>
+
+            {submittedInquiryId ? (
+              <div className="p-8 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-center space-y-4 animate-in zoom-in-95">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-black text-white uppercase tracking-wide">
+                    Message Received by Farm Operations Desk!
+                  </h4>
+                  <p className="text-xs text-[#FDFBF5]/80 mt-1">
+                    Your inquiry has been logged as <span className="font-mono text-[#D4AF37] font-bold">#{submittedInquiryId}</span>. Our sales officer will contact you shortly via phone or WhatsApp.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmittedInquiryId(null);
+                    setMessage('');
+                  }}
+                  className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  Send Another Message
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleFormSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-[#FDFBF5]/80 uppercase tracking-wider block mb-1.5">
+                      Your Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Hajiya Bilkisu Al-Baraka"
+                      className="w-full bg-[#071810] border border-white/15 rounded-xl px-4 py-3 text-sm text-white placeholder-[#FDFBF5]/30 focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-[#FDFBF5]/80 uppercase tracking-wider block mb-1.5">
+                      Phone or WhatsApp Number *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="e.g. 0802 333 4455"
+                      className="w-full bg-[#071810] border border-white/15 rounded-xl px-4 py-3 text-sm text-white placeholder-[#FDFBF5]/30 focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-[#FDFBF5]/80 uppercase tracking-wider block mb-1.5">
+                      Email Address (Optional)
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="e.g. bilkisu@gmail.com"
+                      className="w-full bg-[#071810] border border-white/15 rounded-xl px-4 py-3 text-sm text-white placeholder-[#FDFBF5]/30 focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-[#FDFBF5]/80 uppercase tracking-wider block mb-1.5">
+                      Inquiry Subject
+                    </label>
+                    <input
+                      type="text"
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
+                      placeholder="e.g. Weekly Egg Supply Contract"
+                      className="w-full bg-[#071810] border border-white/15 rounded-xl px-4 py-3 text-sm text-white placeholder-[#FDFBF5]/30 focus:outline-none focus:border-[#D4AF37]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#FDFBF5]/80 uppercase tracking-wider block mb-1.5">
+                    Your Message / Order Requirement
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Tell us what you'd like to order, quantity, delivery location in Kaduna or other states, or specific supply schedules..."
+                    className="w-full bg-[#071810] border border-white/15 rounded-xl p-4 text-sm text-white placeholder-[#FDFBF5]/30 focus:outline-none focus:border-[#D4AF37] leading-relaxed"
+                  ></textarea>
+                </div>
+
+                <div className="pt-2 flex flex-wrap items-center justify-between gap-4">
+                  <button
+                    type="button"
+                    onClick={handleSendViaWhatsApp}
+                    className="px-6 py-3.5 rounded-xl bg-[#25D366] hover:bg-[#20BA58] text-[#0D2B1D] font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Send & Chat on WhatsApp</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-8 py-3.5 rounded-xl bg-[#D4AF37] hover:bg-[#E5C158] text-[#0D2B1D] font-black text-xs sm:text-sm uppercase tracking-wider flex items-center gap-2 shadow-xl transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Transmitting...' : 'Submit to Operations Desk'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+
       </div>
     </section>
   );

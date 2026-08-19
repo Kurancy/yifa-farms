@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFarmConfig } from '../context/FarmConfigContext';
+import { useToast } from '../context/ToastContext';
 import { kadunaLocations } from '../data/farmData';
 import { QuoteRequest, PageType } from '../types';
 import {
@@ -29,7 +30,8 @@ export const QuoteCalculator: React.FC<QuoteCalculatorProps> = ({
   initialCategory = 'Eggs',
   onNavigate
 }) => {
-  const { config, submitQuote } = useFarmConfig();
+  const { config, submitQuote, inventory } = useFarmConfig();
+  const toast = useToast();
 
   const [productCategory, setProductCategory] = useState<string>(initialCategory || 'Eggs');
   const [specificItem, setSpecificItem] = useState<string>(initialProduct || 'Fresh Farm Eggs (30-Egg Crate)');
@@ -94,8 +96,15 @@ export const QuoteCalculator: React.FC<QuoteCalculatorProps> = ({
   const handleWhatsAppSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !phoneOrWhatsapp.trim()) {
-      alert('Please fill in your Name and Phone/WhatsApp number so our farm team can address your quote.');
+      toast.error('Please enter your Full Name and Phone/WhatsApp number so we can address your quote.', 'Missing Details');
       return;
+    }
+
+    const matchedInv = inventory.find(
+      (inv) => inv.name.toLowerCase().includes(specificItem.toLowerCase().slice(0, 8))
+    );
+    if (matchedInv && matchedInv.currentStock <= 0) {
+      toast.warning('This item is currently sold out for immediate dispatch. Your quote will be queued for the next harvest batch.', 'Pre-Order Harvest Notice');
     }
 
     const payloadText = compileWhatsAppText();
@@ -116,13 +125,14 @@ export const QuoteCalculator: React.FC<QuoteCalculatorProps> = ({
       message
     });
 
+    toast.info('Opening direct WhatsApp quote chat with Kaduna dispatch...', 'Connecting WhatsApp');
     window.open(whatsappUrl, '_blank');
   };
 
   const handleDirectFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !phoneOrWhatsapp.trim()) {
-      alert('Please fill in your Name and Phone/WhatsApp number.');
+      toast.error('Please fill in your Full Name and Phone/WhatsApp number.', 'Required Fields');
       return;
     }
 
@@ -143,8 +153,9 @@ export const QuoteCalculator: React.FC<QuoteCalculatorProps> = ({
       });
 
       setSubmittedQuoteId(res.id);
+      toast.success('Your quote request has been recorded. Our dispatch desk will contact you within 15 minutes with verified farm-gate rates.', 'Quote Generated');
     } catch {
-      // ignore
+      toast.error('We could not transmit your quote request. Please try again or reach us directly via WhatsApp.', 'Submission Failed');
     } finally {
       setIsSubmitting(false);
     }
@@ -153,6 +164,7 @@ export const QuoteCalculator: React.FC<QuoteCalculatorProps> = ({
   const handleCopySummary = () => {
     navigator.clipboard.writeText(compileWhatsAppText());
     setCopiedLink(true);
+    toast.success('Quote spec sheet copied to clipboard.', 'Copied');
     setTimeout(() => setCopiedLink(false), 2500);
   };
 

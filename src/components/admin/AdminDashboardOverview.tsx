@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useFarmConfig } from '../../context/FarmConfigContext';
 import { UnifiedOrder, OrderStatus } from '../../types';
 import { AdminOrderRowsSkeleton } from '../skeletons/LoadingSkeletons';
+import {
+  generateDynamicDailySales,
+  getFormattedRangeHeader,
+  getTodayFullFormatted
+} from '../../utils/dateUtils';
 import {
   TrendingUp,
   DollarSign,
@@ -17,7 +22,8 @@ import {
   Layers,
   ChevronRight,
   Eye,
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 
 interface AdminDashboardOverviewProps {
@@ -38,40 +44,76 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 300);
+    }, 250);
     return () => clearTimeout(timer);
   }, []);
 
-  // Realistic revenue data points for 7 days
-  const last7DaysData = [
-    { label: 'Mon', revenue: 185000, orders: 4 },
-    { label: 'Tue', revenue: 240000, orders: 6 },
-    { label: 'Wed', revenue: 310000, orders: 8 },
-    { label: 'Thu', revenue: 275000, orders: 5 },
-    { label: 'Fri', revenue: 420000, orders: 11 },
-    { label: 'Sat', revenue: 580000, orders: 14 },
-    { label: 'Sun (Today)', revenue: salesMetrics.todayRevenue || 485000, orders: salesMetrics.todayOrders || 7 }
-  ];
+  // Dynamic real-time calculated days ending on system TODAY
+  const daily7DaysPoints = useMemo(() => {
+    return generateDynamicDailySales(orders, 7);
+  }, [orders]);
 
-  const maxRevenue = Math.max(...last7DaysData.map(d => d.revenue), 600000);
+  const daily30DaysPoints = useMemo(() => {
+    return generateDynamicDailySales(orders, 30);
+  }, [orders]);
 
-  const lowStockItems = inventory.filter(i => i.currentStock <= i.lowStockThreshold);
+  const activePoints = chartView === '7days' ? daily7DaysPoints : daily30DaysPoints;
+
+  const maxRevenue = useMemo(() => {
+    const maxVal = Math.max(...activePoints.map((d) => d.revenue), 100000);
+    return Math.ceil(maxVal * 1.15); // headroom for chart bars
+  }, [activePoints]);
+
+  const totalPeriodRevenue = useMemo(() => {
+    return activePoints.reduce((acc, curr) => acc + curr.revenue, 0);
+  }, [activePoints]);
+
+  const peakPoint = useMemo(() => {
+    if (activePoints.length === 0) return null;
+    return [...activePoints].sort((a, b) => b.revenue - a.revenue)[0];
+  }, [activePoints]);
+
+  const lowStockItems = inventory.filter((i) => i.currentStock <= i.lowStockThreshold);
   const recentOrders = orders.slice(0, 6);
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
       case 'pending':
-        return <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Pending</span>;
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            Pending
+          </span>
+        );
       case 'confirmed':
-        return <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">Confirmed</span>;
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+            Confirmed
+          </span>
+        );
       case 'processing':
-        return <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">Batching</span>;
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+            Batching
+          </span>
+        );
       case 'dispatched':
-        return <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">En Route</span>;
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+            En Route
+          </span>
+        );
       case 'delivered':
-        return <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Delivered</span>;
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            Delivered
+          </span>
+        );
       case 'cancelled':
-        return <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">Cancelled</span>;
+        return (
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+            Cancelled
+          </span>
+        );
       default:
         return null;
     }
@@ -79,20 +121,23 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
 
   return (
     <div className="space-y-8 font-sans">
-      
       {/* Top Banner & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0D2B1D] p-6 rounded-3xl border border-white/10 shadow-xl">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#0D2B1D] p-6 rounded-3xl border border-white/10 shadow-xl">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
             <span className="text-xs font-bold text-[#D4AF37] uppercase tracking-widest">
-              Kaduna Operations Live Feed
+              Live Operations Feed
+            </span>
+            <span className="text-white/30">•</span>
+            <span className="text-xs text-white/80 font-medium font-mono">
+              {getTodayFullFormatted()}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
             Farm Performance Overview
           </h1>
-          <p className="text-xs text-[#FDFBF5]/60 mt-1">
+          <p className="text-xs text-[#FDFBF5]/60 mt-1 max-w-2xl">
             Real-time synchronization between Rigachikun farm pens, dispatch logistics, and customer storefront.
           </p>
         </div>
@@ -118,7 +163,6 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
 
       {/* 4 Core Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
         {/* Today's Sales */}
         <div className="bg-[#0D2B1D] border border-white/10 p-5 rounded-2xl shadow-lg relative overflow-hidden group hover:border-[#D4AF37]/40 transition-all">
           <div className="flex justify-between items-start mb-3">
@@ -171,7 +215,7 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
           </div>
           <div className="mt-2 flex items-center justify-between text-xs">
             <span className="text-[#FDFBF5]/70 font-medium">
-              Avg. Order: <span className="font-mono text-white font-bold">₦{salesMetrics.averageOrderValue.toLocaleString()}</span>
+              Avg. Order: <span className="font-mono text-white font-bold">₦{Math.round(salesMetrics.averageOrderValue).toLocaleString()}</span>
             </span>
             <span className="text-blue-400 text-[11px] font-bold">30 Days</span>
           </div>
@@ -199,7 +243,6 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
             )}
           </div>
         </div>
-
       </div>
 
       {/* Low Stock Warning Banner if any */}
@@ -214,7 +257,7 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
                 Inventory Attention Required ({lowStockItems.length} Products Low in Warehouse)
               </h4>
               <p className="text-xs text-[#FDFBF5]/70 mt-0.5">
-                {lowStockItems.map(i => `${i.name} (${i.currentStock} ${i.unit} left)`).join(' • ')}
+                {lowStockItems.map((i) => `${i.name} (${i.currentStock} ${i.unit} left)`).join(' • ')}
               </p>
             </div>
           </div>
@@ -228,12 +271,21 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
         </div>
       )}
 
-      {/* Interactive Sales Trend & Revenue Chart */}
-      <div className="bg-[#0D2B1D] border border-white/10 rounded-3xl p-6 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      {/* Interactive Sales Trend & Dynamic Daily Chart */}
+      <div className="bg-[#0D2B1D] border border-white/10 rounded-3xl p-6 shadow-xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="text-[11px] font-bold text-[#D4AF37] uppercase tracking-widest">Revenue Analytics</div>
-            <h3 className="text-lg font-bold text-white uppercase tracking-wide">Daily Commercial Sales Trend</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-[#D4AF37] uppercase tracking-widest">
+                Dynamic Revenue Analytics
+              </span>
+              <span className="text-xs text-[#FDFBF5]/40 font-mono">
+                ({getFormattedRangeHeader(chartView === '7days' ? 7 : 30)})
+              </span>
+            </div>
+            <h3 className="text-lg font-bold text-white uppercase tracking-wide mt-0.5">
+              Daily Commercial Sales Trend
+            </h3>
           </div>
 
           <div className="flex items-center gap-2 bg-[#071810] p-1 rounded-xl border border-white/10">
@@ -251,53 +303,79 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
                 chartView === '30days' ? 'bg-[#D4AF37] text-[#0D2B1D]' : 'text-[#FDFBF5]/60 hover:text-white'
               }`}
             >
-              Monthly Summary
+              Past 30 Days
             </button>
           </div>
         </div>
 
-        {/* SVG Bar / Area Visualization */}
+        {/* SVG Dynamic Bars */}
         <div className="space-y-4">
-          <div className="grid grid-cols-7 gap-2 sm:gap-4 items-end h-56 pt-8 pb-2 px-2 bg-[#071810]/60 rounded-2xl border border-white/5">
-            {last7DaysData.map((day, idx) => {
-              const heightPct = Math.max(15, Math.round((day.revenue / maxRevenue) * 100));
-              const isToday = idx === last7DaysData.length - 1;
+          <div
+            className={`grid gap-2 sm:gap-3 items-end h-60 pt-8 pb-3 px-3 bg-[#071810]/70 rounded-2xl border border-white/5 ${
+              chartView === '7days' ? 'grid-cols-7' : 'grid-cols-10 sm:grid-cols-15 md:grid-cols-30 overflow-x-auto'
+            }`}
+          >
+            {activePoints.map((point, idx) => {
+              const heightPct = Math.max(14, Math.round((point.revenue / maxRevenue) * 100));
 
               return (
-                <div key={idx} className="flex flex-col items-center h-full justify-end group relative">
+                <div key={idx} className="flex flex-col items-center h-full justify-end group relative min-w-[20px]">
                   {/* Tooltip on hover */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-10 bg-black/90 text-white text-[11px] font-mono py-1 px-2 rounded-lg pointer-events-none whitespace-nowrap z-20 border border-white/15 shadow-xl">
-                    ₦{day.revenue.toLocaleString()} ({day.orders} orders)
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-12 bg-black/95 text-white text-[11px] font-mono py-1.5 px-2.5 rounded-xl pointer-events-none whitespace-nowrap z-30 border border-[#D4AF37]/30 shadow-2xl">
+                    <div className="font-bold text-[#D4AF37]">{point.fullLabel}</div>
+                    <div>₦{point.revenue.toLocaleString()} • {point.ordersCount} orders</div>
                   </div>
 
                   {/* Bar */}
                   <div
                     style={{ height: `${heightPct}%` }}
-                    className={`w-full max-w-[48px] rounded-t-xl transition-all duration-500 relative ${
-                      isToday
-                        ? 'bg-[#D4AF37] shadow-lg shadow-[#D4AF37]/25'
-                        : 'bg-emerald-600/70 group-hover:bg-emerald-500'
+                    className={`w-full max-w-[44px] rounded-t-xl transition-all duration-500 relative cursor-pointer ${
+                      point.isToday
+                        ? 'bg-[#D4AF37] shadow-lg shadow-[#D4AF37]/30'
+                        : point.isYesterday
+                        ? 'bg-emerald-400 group-hover:bg-emerald-300'
+                        : 'bg-emerald-600/75 group-hover:bg-emerald-500'
                     }`}
                   >
-                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-mono font-bold text-[#FDFBF5]/70 hidden sm:block">
-                      {Math.round(day.revenue / 1000)}k
-                    </div>
+                    {chartView === '7days' && (
+                      <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-mono font-bold text-[#FDFBF5]/80 hidden sm:block">
+                        {Math.round(point.revenue / 1000)}k
+                      </div>
+                    )}
                   </div>
 
-                  {/* Label */}
-                  <span className={`text-[11px] font-bold mt-2 truncate w-full text-center ${
-                    isToday ? 'text-[#D4AF37]' : 'text-[#FDFBF5]/50'
-                  }`}>
-                    {day.label}
-                  </span>
+                  {/* Dynamic Label */}
+                  {chartView === '7days' ? (
+                    <span
+                      className={`text-[11px] font-bold mt-2 truncate w-full text-center ${
+                        point.isToday ? 'text-[#D4AF37] font-black' : 'text-[#FDFBF5]/60'
+                      }`}
+                    >
+                      {point.dayLabel}
+                    </span>
+                  ) : (
+                    idx % 5 === 0 && (
+                      <span className="text-[9px] font-mono mt-1 text-[#FDFBF5]/40 truncate">
+                        {point.shortDate}
+                      </span>
+                    )
+                  )}
                 </div>
               );
             })}
           </div>
 
-          <div className="flex justify-between items-center text-xs text-[#FDFBF5]/50 px-2">
-            <span>Peak Day: Saturday (₦580,000 / 14 Wholesale Crates & Live Birds)</span>
-            <span className="font-mono">Weekly Total: ₦{salesMetrics.weekRevenue.toLocaleString()}</span>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs text-[#FDFBF5]/60 px-2 gap-2">
+            <span>
+              {peakPoint && (
+                <>
+                  <strong className="text-white">Peak Period:</strong> {peakPoint.fullLabel} (₦{peakPoint.revenue.toLocaleString()} / {peakPoint.ordersCount} orders)
+                </>
+              )}
+            </span>
+            <span className="font-mono text-white">
+              Period Aggregate: <strong className="text-[#D4AF37]">₦{totalPeriodRevenue.toLocaleString()}</strong>
+            </span>
           </div>
         </div>
       </div>
@@ -319,63 +397,57 @@ export const AdminDashboardOverview: React.FC<AdminDashboardOverviewProps> = ({
           </button>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#071810]">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#0D2B1D] text-[#FDFBF5]/60 uppercase tracking-wider text-[10px] border-b border-white/10">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-[#FDFBF5]/90">
+            <thead className="bg-[#071810] text-[#FDFBF5]/60 uppercase tracking-wider text-[10px] border-b border-white/10 font-bold">
               <tr>
-                <th className="py-3.5 px-4">Invoice #</th>
-                <th className="py-3.5 px-4">Customer</th>
-                <th className="py-3.5 px-4">Items Summary</th>
-                <th className="py-3.5 px-4 text-right">Total Amount</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
-                <th className="py-3.5 px-4 text-center">Quick Action</th>
+                <th className="py-3 px-4">Invoice #</th>
+                <th className="py-3 px-4">Customer</th>
+                <th className="py-3 px-4">Consignment Items</th>
+                <th className="py-3 px-4 text-right">Amount (₦)</th>
+                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 text-[#FDFBF5]/90">
-              {isLoading ? (
-                <AdminOrderRowsSkeleton rowsCount={4} />
-              ) : (
-                recentOrders.map((ord) => (
-                  <tr
-                    key={ord.id}
-                    onClick={() => onSelectOrder(ord)}
-                    className="hover:bg-white/5 transition-colors cursor-pointer"
-                  >
-                    <td className="py-3.5 px-4 font-mono font-bold text-white">
-                      {ord.id}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-white">{ord.customerName}</div>
-                      <div className="text-[11px] text-[#FDFBF5]/50 truncate max-w-[180px]">{ord.deliveryAddress}</div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="truncate max-w-[220px]">
-                        {ord.items.map(i => `${i.quantity} ${i.unit} ${i.name}`).join(', ') || 'Produce'}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-white">
-                      ₦{ord.totalAmount.toLocaleString()}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      {getStatusBadge(ord.status)}
-                    </td>
-                    <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => onSelectOrder(ord)}
-                        className="p-1.5 rounded-lg bg-white/5 hover:bg-[#D4AF37]/20 hover:text-[#D4AF37] text-[#FDFBF5]/70 transition-colors cursor-pointer"
-                        title="Manage Order & Dispatch"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
+            <tbody className="divide-y divide-white/5">
+              {recentOrders.map((order) => (
+                <tr
+                  key={order.id}
+                  onClick={() => onSelectOrder(order)}
+                  className="hover:bg-white/[0.03] transition-colors cursor-pointer"
+                >
+                  <td className="py-3.5 px-4 font-mono font-bold text-[#D4AF37]">{order.id}</td>
+                  <td className="py-3.5 px-4">
+                    <div className="font-bold text-white">{order.customerName}</div>
+                    <div className="text-[11px] text-[#FDFBF5]/50">{order.customerPhone}</div>
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <div className="text-[#FDFBF5]/80 line-clamp-1">
+                      {order.items.map((i) => `${i.quantity}x ${i.name}`).join(', ')}
+                    </div>
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-mono font-bold text-white">
+                    ₦{order.totalAmount.toLocaleString()}
+                  </td>
+                  <td className="py-3.5 px-4 text-center">{getStatusBadge(order.status)}</td>
+                  <td className="py-3.5 px-4 text-center">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectOrder(order);
+                      }}
+                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-[#FDFBF5]/70 hover:text-white transition-colors cursor-pointer"
+                      title="Inspect Invoice & Dispatch"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
-
     </div>
   );
 };

@@ -23,8 +23,8 @@ export const SeasonalNoticeBanner: React.FC<SeasonalNoticeBannerProps> = ({ onAc
   if (!isVisible) return null;
 
   return (
-    <aside aria-label="Seasonal Harvest Announcement" className="relative z-50 bg-[#071810] text-[#FDFBF5] border-b border-[#D4AF37]/30 text-xs transition-all duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-2.5 flex items-center justify-between gap-3">
+    <aside aria-label="Seasonal Harvest Announcement" className="relative z-50 bg-[#071810] text-[#FDFBF5] border-b border-[#D4AF37]/30 text-xs transition-all duration-300 w-full">
+      <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-2 flex items-center justify-between gap-3">
         {/* Left / Center Message Content */}
         <div className="flex-1 flex items-center justify-center sm:justify-start gap-2.5 sm:gap-3 flex-wrap sm:flex-nowrap text-center sm:text-left">
           {/* Badge */}

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useFarmConfig } from '../../context/FarmConfigContext';
+import { useToast } from '../../context/ToastContext';
 import { UnifiedOrder, OrderStatus, PaymentStatus } from '../../types';
 import { AdminOrderRowsSkeleton } from '../skeletons/LoadingSkeletons';
 import {
@@ -36,6 +37,7 @@ export const AdminOrdersPage: React.FC<AdminOrdersPageProps> = ({
   onSelectOrder
 }) => {
   const { orders, deleteOrder, bulkUpdateOrderStatus, bulkDeleteOrders, currentStaffUser } = useFarmConfig();
+  const toast = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -117,50 +119,83 @@ export const AdminOrdersPage: React.FC<AdminOrdersPageProps> = ({
     );
   };
 
-  const handleApplyBulkStatus = () => {
+  const handleApplyBulkStatus = async () => {
     if (selectedOrderIds.length === 0) return;
-    if (window.confirm(`Update ${selectedOrderIds.length} orders to '${bulkStatusToApply.toUpperCase()}'?`)) {
-      bulkUpdateOrderStatus(selectedOrderIds, bulkStatusToApply);
-      setSelectedOrderIds([]);
+    const count = selectedOrderIds.length;
+    const proceed = await toast.confirmAction({
+      title: 'Update Multiple Orders',
+      message: `Are you sure you want to update ${count} selected order${count > 1 ? 's' : ''} to status "${bulkStatusToApply.toUpperCase()}"?`,
+      confirmText: `Update to ${bulkStatusToApply}`,
+      type: 'warning'
+    });
+
+    if (proceed) {
+      try {
+        bulkUpdateOrderStatus(selectedOrderIds, bulkStatusToApply);
+        toast.success(`Successfully updated ${count} orders to ${bulkStatusToApply}.`, 'Status Updated');
+        setSelectedOrderIds([]);
+      } catch {
+        toast.error('Failed to update selected orders. Please try again.', 'Update Error');
+      }
     }
   };
 
-  const handleApplyBulkDelete = () => {
+  const handleApplyBulkDelete = async () => {
     if (selectedOrderIds.length === 0) return;
-    if (window.confirm(`Are you sure you want to permanently delete ${selectedOrderIds.length} selected orders?`)) {
-      bulkDeleteOrders(selectedOrderIds);
-      setSelectedOrderIds([]);
+    const count = selectedOrderIds.length;
+    const proceed = await toast.confirmAction({
+      title: 'Bulk Delete Orders',
+      message: `Are you sure you want to permanently delete ${count} selected order${count > 1 ? 's' : ''}? This action cannot be reversed.`,
+      confirmText: 'Permanently Delete',
+      cancelText: 'Cancel',
+      type: 'danger'
+    });
+
+    if (proceed) {
+      try {
+        bulkDeleteOrders(selectedOrderIds);
+        toast.success(`Permanently deleted ${count} order records.`, 'Orders Deleted');
+        setSelectedOrderIds([]);
+      } catch {
+        toast.error('Failed to delete orders. Please check database connectivity.', 'Deletion Error');
+      }
     }
   };
 
   // Export to CSV helper
   const handleExportCSV = (ordersToExport = filteredOrders) => {
-    const headers = ['Invoice ID', 'Order Date', 'Customer Name', 'Phone', 'Address', 'Customer Type', 'Items', 'Subtotal (NGN)', 'Discount (NGN)', 'Delivery Fee (NGN)', 'Total Amount (NGN)', 'Status', 'Payment Status', 'Driver'];
-    const rows = ordersToExport.map(o => [
-      `"${o.id}"`,
-      `"${o.orderDate}"`,
-      `"${o.customerName.replace(/"/g, '""')}"`,
-      `"${o.phone}"`,
-      `"${o.deliveryAddress.replace(/"/g, '""')}"`,
-      `"${o.customerType}"`,
-      `"${o.items.map(i => `${i.quantity}x ${i.name}`).join('; ')}"`,
-      o.subtotal,
-      o.discount,
-      o.deliveryFee,
-      o.totalAmount,
-      `"${o.status}"`,
-      `"${o.paymentStatus}"`,
-      `"${o.dispatchDriver || 'Unassigned'}"`
-    ]);
+    try {
+      const headers = ['Invoice ID', 'Order Date', 'Customer Name', 'Phone', 'Address', 'Customer Type', 'Items', 'Subtotal (NGN)', 'Discount (NGN)', 'Delivery Fee (NGN)', 'Total Amount (NGN)', 'Status', 'Payment Status', 'Driver'];
+      const rows = ordersToExport.map(o => [
+        `"${o.id}"`,
+        `"${o.orderDate}"`,
+        `"${o.customerName.replace(/"/g, '""')}"`,
+        `"${o.phone}"`,
+        `"${o.deliveryAddress.replace(/"/g, '""')}"`,
+        `"${o.customerType}"`,
+        `"${o.items.map(i => `${i.quantity}x ${i.name}`).join('; ')}"`,
+        o.subtotal,
+        o.discount,
+        o.deliveryFee,
+        o.totalAmount,
+        `"${o.status}"`,
+        `"${o.paymentStatus}"`,
+        `"${o.dispatchDriver || 'Unassigned'}"`
+      ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `YIFA_Farms_Orders_Export_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `YIFA_Farms_Orders_Export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success(`Exported ${ordersToExport.length} orders to CSV spreadsheet.`, 'CSV Exported');
+    } catch {
+      toast.error('Could not generate CSV file. Please try again.', 'Export Failed');
+    }
   };
 
   const getStatusBadge = (status: OrderStatus) => {
@@ -590,9 +625,21 @@ export const AdminOrdersPage: React.FC<AdminOrdersPageProps> = ({
                           {currentStaffUser?.role === 'admin' && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (window.confirm(`Delete order #${order.id}?`)) {
-                                  deleteOrder(order.id);
+                              onClick={async () => {
+                                const proceed = await toast.confirmAction({
+                                  title: 'Delete Order Record',
+                                  message: `Are you sure you want to permanently delete order #${order.id} for ${order.customerName}?`,
+                                  confirmText: 'Delete Order',
+                                  cancelText: 'Cancel',
+                                  type: 'danger'
+                                });
+                                if (proceed) {
+                                  const ok = deleteOrder(order.id);
+                                  if (ok) {
+                                    toast.success(`Order #${order.id} deleted.`, 'Order Removed');
+                                  } else {
+                                    toast.error(`Failed to delete order #${order.id}.`, 'Error');
+                                  }
                                 }
                               }}
                               className="p-2 rounded-xl bg-white/5 hover:bg-rose-500 hover:text-white text-rose-400 transition-colors cursor-pointer border border-white/10"

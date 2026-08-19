@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FarmConfigProvider, useFarmConfig } from './context/FarmConfigContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { ToastProvider } from './context/ToastContext';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { HomeOverviewHub } from './components/HomeOverviewHub';
@@ -269,9 +271,13 @@ export function AppContent() {
 
 export default function App() {
   return (
-    <FarmConfigProvider>
-      <AppContent />
-    </FarmConfigProvider>
+    <ThemeProvider>
+      <FarmConfigProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </FarmConfigProvider>
+    </ThemeProvider>
   );
 }
 

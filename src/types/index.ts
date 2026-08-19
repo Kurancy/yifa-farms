@@ -3,8 +3,7 @@ export interface FarmConfig {
   tagline: string;
   foundedYear: number;
   founderName: string;
-  shopAddress?: string;
-  locationCity?: string;
+  locationCity: string;
   locationState: string;
   locationCountry: string;
   exactAddress: string;
@@ -27,11 +26,21 @@ export interface FarmConfig {
   showClientBadges: boolean;
 }
 
+export type ProductCategory =
+  | 'eggs'
+  | 'chicken'
+  | 'vegetables'
+  | 'poultry'
+  | 'fish'
+  | 'livestock'
+  | 'dairy'
+  | 'feed';
+
 export interface ProductItem {
   id: string;
   name: string;
   tagline: string;
-  category: 'eggs' | 'chicken' | 'vegetables' | 'poultry' | 'fish' | 'livestock';
+  category: ProductCategory;
   description: string;
   features: string[];
   specs: {
@@ -42,6 +51,8 @@ export interface ProductItem {
     availability: string;
     estimatedPrice?: string;
     isPriceConfirmed?: boolean;
+    unitPrice?: number;
+    wholesalePrice?: number;
   };
   image: string;
   badge?: string;
@@ -81,6 +92,26 @@ export interface QuoteRequest {
   message: string;
   createdAt?: string;
   status?: 'new' | 'contacted' | 'fulfilled';
+}
+
+export interface CustomerInquiry {
+  id: string; // e.g. INQ-8421
+  fullName: string;
+  phone: string;
+  email?: string;
+  channel: 'contact_form' | 'whatsapp' | 'quote_request' | 'track_order_support' | 'custom';
+  subject: string;
+  message: string;
+  productCategory?: string;
+  specificItem?: string;
+  quantity?: number;
+  unit?: string;
+  location?: string;
+  status: 'new' | 'in_progress' | 'replied' | 'closed';
+  priority: 'high' | 'normal' | 'urgent';
+  createdAt: string; // ISO string
+  repliedAt?: string;
+  replyNotes?: string;
 }
 
 export interface TestimonialItem {
@@ -167,7 +198,7 @@ export interface InventoryItem {
   id: string;
   productId: string;
   name: string;
-  category: 'eggs' | 'chicken' | 'vegetables' | 'poultry' | 'fish' | 'livestock';
+  category: ProductCategory;
   currentStock: number;
   unit: string;
   lowStockThreshold: number;
@@ -178,6 +209,7 @@ export interface InventoryItem {
   lastRestocked: string;
   status: 'in_stock' | 'low_stock' | 'out_of_stock';
   image?: string;
+  description?: string;
   // Perishables & Freshness Tracking
   batchNumber?: string;
   harvestDate?: string;
@@ -247,9 +279,14 @@ export interface ActivityLog {
     | 'order_status'
     | 'order_create'
     | 'inventory_update'
+    | 'product_created'
+    | 'product_updated'
+    | 'product_deleted'
     | 'supplier_po'
     | 'staff_change'
     | 'customer_update'
+    | 'inquiry_received'
+    | 'inquiry_replied'
     | 'bulk_action'
     | 'notification_sent';
   description: string;
@@ -294,13 +331,14 @@ export interface StaffMember {
 
 export interface AdminNotification {
   id: string;
-  type: 'new_order' | 'low_stock' | 'status_change' | 'quote_request';
+  type: 'new_order' | 'low_stock' | 'status_change' | 'quote_request' | 'new_inquiry' | 'product_updated';
   title: string;
   message: string;
   timestamp: string;
   read: boolean;
   orderId?: string;
   inventoryId?: string;
+  inquiryId?: string;
 }
 
 export type PageType =
@@ -313,4 +351,3 @@ export type PageType =
   | 'gallery'
   | 'contact'
   | 'admin';
-

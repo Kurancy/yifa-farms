@@ -5,15 +5,14 @@ export const initialFarmConfig: FarmConfig = {
   tagline: "Fresh From Our Farm. Trusted By Your Family.",
   foundedYear: 2018,
   founderName: "Abubakar Ibrahim",
-  shopAddress: "College Road, adjacent Baba Marte Street, Ungwan Dosa, Kaduna",
   locationCity: "Kaduna",
   locationState: "Kaduna State",
   locationCountry: "Nigeria",
-  exactAddress: "Dandami Road, Birnin Yero by Zaria Road, Kaduna State",
+  exactAddress: "Off Zaria Road Agribusiness Corridor, Rigachikun / Maraban Jos Axis, Kaduna State, Nigeria",
   isAddressConfirmed: false,
-  phoneDisplay: "+234 803 580 3963",
-  phoneRaw: "0818 606 2662",
-  whatsappNumber: "0818 579 7931",
+  phoneDisplay: "+234 803 000 1234",
+  phoneRaw: "2348030001234",
+  whatsappNumber: "2348030001234",
   whatsappDisplay: "+234 803 000 1234",
   email: "info@yifafarms.ng",
   openingHours: "Mon – Sat: 7:00 AM – 6:00 PM (Sunday Dispatch on Booking)",
@@ -153,7 +152,7 @@ export const productsData: ProductItem[] = [
       estimatedPrice: "Farm-gate per kg rates",
       isPriceConfirmed: false,
     },
-    image: "https://images.unsplash.com/photo-1524704654690-b56c05c78a00?auto=format&fit=crop&w=1200&q=80" 
+    image: "https://images.unsplash.com/photo-1524704654690-b56c05c78a00?auto=format&fit=crop&w=1200&q=80"
   },
   {
     id: "kaduna-rams-goats",
@@ -183,6 +182,13 @@ export const productsData: ProductItem[] = [
 ];
 
 export const facilitiesData = [
+  {
+    id: "poultry-pens",
+    title: "Ventilated Layer & Broiler Housing",
+    description: "Engineered poultry pens designed for Northern Nigerian climate with natural cross-ventilation, automated nipple drinkers, clean feeding troughs, and comfortable nesting areas.",
+    metric: "Biosecure Rearing",
+    image: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?auto=format&fit=crop&w=1000&q=80"
+  },
   {
     id: "egg-grading",
     title: "Sanitary Egg Collection & Sorting",
@@ -1230,6 +1236,53 @@ export const initialAutomatedNotifications: import('../types').AutomatedNotifica
     status: "sent"
   }
 ];
+
+export const initialCustomerInquiries: import('../types').CustomerInquiry[] = [
+  {
+    id: "INQ-9102",
+    fullName: "Amina Mohammed Bello",
+    phone: "+234 803 451 9021",
+    email: "amina.bello@gmail.com",
+    channel: "contact_form",
+    subject: "Weekly Eggs & Broiler Supply for School Cafeteria",
+    message: "Hello Abubakar, we run a boarding academy in Barnawa Kaduna and require 40 crates of fresh eggs and 60 dressed broilers delivered every Monday morning. Please provide contract pricing and payment terms.",
+    productCategory: "Eggs & Poultry",
+    location: "Barnawa, Kaduna South",
+    status: "new",
+    priority: "high",
+    createdAt: new Date(Date.now() - 35 * 60 * 1000).toISOString()
+  },
+  {
+    id: "INQ-8840",
+    fullName: "Chief Emeka Eze (De-Chuks Foods)",
+    phone: "+234 806 772 1199",
+    channel: "whatsapp",
+    subject: "Live Fish Pond Harvest Booking (150kg Catfish)",
+    message: "Good day YIFA Farms. Inquiring on behalf of De-Chuks Restaurant on Constitution Road. We need 150kg table-size live catfish for this Friday peppersoup night. Can you dispatch with aerated drums?",
+    productCategory: "Fish",
+    location: "Constitution Road, Kaduna Central",
+    status: "in_progress",
+    priority: "urgent",
+    createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+  },
+  {
+    id: "INQ-7612",
+    fullName: "Hajiya Maryam Sani",
+    phone: "+234 814 200 3344",
+    email: "m.sani.catering@yahoo.com",
+    channel: "quote_request",
+    subject: "Wedding Reception Catering Quote (400 Birds + 50 Crates Eggs)",
+    message: "Requested bulk quotation for upcoming wedding ceremony in Ungwan Rimi. Needed quotation for fresh jumbo eggs and whole dressed chickens with delivery schedule.",
+    productCategory: "Poultry & Eggs",
+    location: "Ungwan Rimi, Kaduna",
+    status: "replied",
+    priority: "normal",
+    createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+    repliedAt: "Yesterday, 03:30 PM",
+    replyNotes: "Shared formal PDF quotation via WhatsApp. Client confirmed receipt and scheduled final deposit payment."
+  }
+];
+
 
 
 

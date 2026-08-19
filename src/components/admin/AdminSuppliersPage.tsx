@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFarmConfig } from '../../context/FarmConfigContext';
+import { useToast } from '../../context/ToastContext';
 import { Supplier, PurchaseOrder, PurchaseOrderItem } from '../../types';
 import {
   Truck,
@@ -34,6 +35,7 @@ export const AdminSuppliersPage: React.FC = () => {
     inventory,
     currentStaffUser
   } = useFarmConfig();
+  const toast = useToast();
 
   const [activeSubTab, setActiveSubTab] = useState<'pos' | 'suppliers'>('pos');
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,6 +69,10 @@ export const AdminSuppliersPage: React.FC = () => {
   };
 
   const handleRemovePOItem = (index: number) => {
+    if (poItems.length <= 1) {
+      toast.warning('Purchase order requires at least one line item.', 'Item Required');
+      return;
+    }
     setPoItems(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -85,51 +91,67 @@ export const AdminSuppliersPage: React.FC = () => {
   const handleCreatePO = (e: React.FormEvent) => {
     e.preventDefault();
     const sup = suppliers.find(s => s.id === selectedSupplierId) || suppliers[0];
-    if (!sup) return;
+    if (!sup) {
+      toast.error('Please select a valid supplier.', 'Supplier Missing');
+      return;
+    }
 
     const poNumber = `PO-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
 
-    addPurchaseOrder({
-      poNumber,
-      supplierId: sup.id,
-      supplierName: sup.name,
-      items: poItems,
-      totalCost: totalPOCost,
-      status: 'ordered',
-      orderDate: new Date().toISOString().split('T')[0],
-      expectedDeliveryDate: expectedDate,
-      notes: poNotes
-    });
+    try {
+      addPurchaseOrder({
+        poNumber,
+        supplierId: sup.id,
+        supplierName: sup.name,
+        items: poItems,
+        totalCost: totalPOCost,
+        status: 'ordered',
+        orderDate: new Date().toISOString().split('T')[0],
+        expectedDeliveryDate: expectedDate,
+        notes: poNotes
+      });
 
-    setIsNewPOModalOpen(false);
-    setPoItems([
-      { name: 'Layer Super Mash (50kg)', quantity: 50, unit: 'Bags', unitCost: 18500, totalCost: 925000, productId: 'fresh-eggs' }
-    ]);
+      toast.success(`Generated Purchase Order #${poNumber} for ${sup.name}.`, 'PO Created');
+      setIsNewPOModalOpen(false);
+      setPoItems([
+        { name: 'Layer Super Mash (50kg)', quantity: 50, unit: 'Bags', unitCost: 18500, totalCost: 925000, productId: 'fresh-eggs' }
+      ]);
+    } catch {
+      toast.error('Failed to create purchase order.', 'Error');
+    }
   };
 
   const handleCreateSupplier = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supName || !supPhone) return;
+    if (!supName.trim() || !supPhone.trim()) {
+      toast.error('Supplier business name and phone number are required.', 'Missing Fields');
+      return;
+    }
 
-    addSupplier({
-      name: supName,
-      category: supCategory,
-      contactPerson: supContact || 'Sales Desk',
-      phone: supPhone,
-      email: supEmail || 'contact@supplier.com',
-      address: supAddress || 'Kaduna State, Nigeria',
-      itemsSupplied: supItemsText.split(',').map(s => s.trim()).filter(Boolean),
-      status: 'active',
-      rating: 5.0
-    });
+    try {
+      addSupplier({
+        name: supName.trim(),
+        category: supCategory,
+        contactPerson: supContact.trim() || 'Sales Desk',
+        phone: supPhone.trim(),
+        email: supEmail.trim() || 'contact@supplier.com',
+        address: supAddress.trim() || 'Kaduna State, Nigeria',
+        itemsSupplied: supItemsText.split(',').map(s => s.trim()).filter(Boolean),
+        status: 'active',
+        rating: 5.0
+      });
 
-    setIsNewSupplierModalOpen(false);
-    setSupName('');
-    setSupContact('');
-    setSupPhone('');
-    setSupEmail('');
-    setSupAddress('');
-    setSupItemsText('');
+      toast.success(`Added "${supName.trim()}" to verified supplier directory.`, 'Supplier Registered');
+      setIsNewSupplierModalOpen(false);
+      setSupName('');
+      setSupContact('');
+      setSupPhone('');
+      setSupEmail('');
+      setSupAddress('');
+      setSupItemsText('');
+    } catch {
+      toast.error('Failed to register supplier.', 'Error');
+    }
   };
 
   return (
@@ -246,7 +268,23 @@ export const AdminSuppliersPage: React.FC = () => {
                       {!isReceived && (
                         <button
                           type="button"
-                          onClick={() => receivePurchaseOrder(po.id)}
+                          onClick={async () => {
+                            const proceed = await toast.confirmAction({
+                              title: 'Receive Consignment & Restock',
+                              message: `Confirm physical arrival of Purchase Order #${po.poNumber}? All item quantities will be added to warehouse stock.`,
+                              confirmText: 'Verify & Add to Stock',
+                              cancelText: 'Cancel',
+                              type: 'info'
+                            });
+                            if (proceed) {
+                              try {
+                                receivePurchaseOrder(po.id);
+                                toast.success(`PO #${po.poNumber} received. Warehouse inventory automatically updated.`, 'Stock Received');
+                              } catch {
+                                toast.error('Failed to update inventory for received PO.', 'Error');
+                              }
+                            }
+                          }}
                           className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
                           title="Verify delivery and automatically add quantities to inventory"
                         >
@@ -258,9 +296,21 @@ export const AdminSuppliersPage: React.FC = () => {
                       {currentStaffUser?.role === 'admin' && (
                         <button
                           type="button"
-                          onClick={() => {
-                            if (window.confirm(`Cancel PO #${po.poNumber}?`)) {
-                              deletePurchaseOrder(po.id);
+                          onClick={async () => {
+                            const proceed = await toast.confirmAction({
+                              title: 'Cancel Purchase Order',
+                              message: `Are you sure you want to cancel and delete PO #${po.poNumber}?`,
+                              confirmText: 'Cancel PO',
+                              cancelText: 'Keep Active',
+                              type: 'danger'
+                            });
+                            if (proceed) {
+                              try {
+                                deletePurchaseOrder(po.id);
+                                toast.success(`Purchase Order #${po.poNumber} cancelled.`, 'PO Removed');
+                              } catch {
+                                toast.error('Failed to delete PO.', 'Error');
+                              }
                             }
                           }}
                           className="p-2 rounded-xl bg-white/5 hover:bg-rose-500 hover:text-white text-rose-400 border border-white/10"

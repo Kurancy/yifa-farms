@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFarmConfig } from '../context/FarmConfigContext';
+import { useToast } from '../context/ToastContext';
 import {
   Gift,
   X,
@@ -26,6 +27,7 @@ export const LoyaltyModal: React.FC<LoyaltyModalProps> = ({
   onOpenQuote
 }) => {
   const { config } = useFarmConfig();
+  const toast = useToast();
   const [calcEggCrates, setCalcEggCrates] = useState<number>(10);
   const [calcChickens, setCalcChickens] = useState<number>(8);
   const [calcName, setCalcName] = useState<string>('');
@@ -51,6 +53,7 @@ export const LoyaltyModal: React.FC<LoyaltyModalProps> = ({
   }
 
   const handleJoinWhatsApp = () => {
+    toast.success(`Registered tier profile: ${currentTier}. Launching WhatsApp concierge...`, 'Loyalty Tier Unlocked');
     const text = `Hello YIFA Farms, I would like to register for the YIFA Farm Club Loyalty Rewards Program.${
       calcName ? ` Name: ${calcName}.` : ''
     }${calcPhone ? ` Phone: ${calcPhone}.` : ''} I estimate buying ~${calcEggCrates} egg crates and ${calcChickens} chickens monthly.`;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { productsData } from '../data/farmData';
+import { useFarmConfig } from '../context/FarmConfigContext';
 import { ProductItem } from '../types';
 import { ProductCard } from './ProductCard';
 import { ProductModal } from './ProductModal';
@@ -17,6 +17,7 @@ export const ProductsSection: React.FC<ProductsSectionProps> = ({
   onSelectForQuote,
   onOpenBulkInquiry
 }) => {
+  const { products } = useFarmConfig();
   const [activeTab, setActiveTab] = useState<string>(selectedCategoryFilter);
   const [activeModalProduct, setActiveModalProduct] = useState<ProductItem | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -26,7 +27,7 @@ export const ProductsSection: React.FC<ProductsSectionProps> = ({
     setIsLoading(true);
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 450);
+    }, 300);
     return () => clearTimeout(timer);
   }, [activeTab]);
 
@@ -43,9 +44,10 @@ export const ProductsSection: React.FC<ProductsSectionProps> = ({
     setActiveTab(tab);
   };
 
-  const filteredProducts = activeTab === 'all'
-    ? productsData
-    : productsData.filter(p => p.category === activeTab);
+  const filteredProducts =
+    activeTab === 'all'
+      ? products
+      : products.filter((p) => p.category === activeTab);
 
   return (
     <section id="products" className="pt-2 pb-20 sm:pt-4 sm:pb-24 bg-transparent text-[#FDFBF5] relative">
@@ -55,7 +57,7 @@ export const ProductsSection: React.FC<ProductsSectionProps> = ({
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#25D366] animate-pulse"></span>
             <span className="text-xs uppercase font-bold tracking-widest text-[#D4AF37]">
-              Live Farm Inventory ({filteredProducts.length} Categories / Items)
+              Live Farm Inventory ({filteredProducts.length} Items Listed)
             </span>
           </div>
 
@@ -96,17 +98,6 @@ export const ProductsSection: React.FC<ProductsSectionProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => handleTabChange('vegetables')}
-              className={`px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
-                activeTab === 'vegetables'
-                  ? 'bg-[#D4AF37] text-[#0D2B1D] shadow-md'
-                  : 'text-[#FDFBF5]/70 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              🥬 Vegetables
-            </button>
-            <button
-              type="button"
               onClick={() => handleTabChange('poultry')}
               className={`px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
                 activeTab === 'poultry'
@@ -125,7 +116,18 @@ export const ProductsSection: React.FC<ProductsSectionProps> = ({
                   : 'text-[#FDFBF5]/70 hover:text-white hover:bg-white/5'
               }`}
             >
-              🐟 Fish
+              🐟 Catfish & Fish
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('vegetables')}
+              className={`px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                activeTab === 'vegetables'
+                  ? 'bg-[#D4AF37] text-[#0D2B1D] shadow-md'
+                  : 'text-[#FDFBF5]/70 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              🥬 Vegetables
             </button>
             <button
               type="button"
@@ -136,59 +138,92 @@ export const ProductsSection: React.FC<ProductsSectionProps> = ({
                   : 'text-[#FDFBF5]/70 hover:text-white hover:bg-white/5'
               }`}
             >
-              🐏 Rams & Goats
+              🐐 Rams & Goats
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('dairy')}
+              className={`px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                activeTab === 'dairy'
+                  ? 'bg-[#D4AF37] text-[#0D2B1D] shadow-md'
+                  : 'text-[#FDFBF5]/70 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              🥛 Yoghurt & Dairy
             </button>
           </div>
         </div>
 
-        {/* Product Cards Grid: Show Skeleton while loading, real cards with fade-in when ready */}
+        {/* Product Cards Grid with Skeleton Loading */}
         {isLoading ? (
-          <ProductGridSkeleton count={activeTab === 'all' ? 8 : Math.max(filteredProducts.length, 4)} />
+          <ProductGridSkeleton count={6} />
+        ) : filteredProducts.length === 0 ? (
+          <div className="text-center py-16 bg-[#0A2217] rounded-3xl border border-white/10 p-8">
+            <ShoppingBag className="w-12 h-12 text-[#D4AF37] mx-auto mb-3 opacity-60" />
+            <h3 className="text-lg font-bold text-white uppercase tracking-wider">No Products in this Category</h3>
+            <p className="text-xs text-[#FDFBF5]/60 mt-1 max-w-md mx-auto">
+              Our farm team adds freshly harvested batches daily. Switch categories or contact sales directly for custom allocations.
+            </p>
+            <button
+              onClick={() => setActiveTab('all')}
+              className="mt-4 px-5 py-2.5 rounded-xl bg-[#D4AF37] text-[#0D2B1D] font-bold text-xs uppercase tracking-wider cursor-pointer"
+            >
+              View All Products
+            </button>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
-                onViewDetails={(p) => setActiveModalProduct(p)}
                 onSelectForQuote={onSelectForQuote}
+                onOpenDetails={setActiveModalProduct}
               />
             ))}
           </div>
         )}
 
-        {/* Commercial Wholesale Box */}
-        <div className="mt-14 bg-[#0A2217] rounded-3xl p-6 sm:p-10 text-[#FDFBF5] flex flex-col md:flex-row items-center justify-between gap-6 border border-white/10 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-[#4A7C59]/10 rounded-full blur-2xl pointer-events-none"></div>
-          <div className="space-y-2 text-center md:text-left relative z-10">
-            <span className="inline-block px-3 py-1 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/40 font-bold text-[10px] uppercase tracking-[0.2em]">
-              Wholesaler & Commercial Off-Takers
-            </span>
-            <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-              Need Regular Weekly or Monthly Bulk Allocations?
-            </h3>
-            <p className="text-sm text-[#FDFBF5]/70 max-w-2xl">
-              We provide fixed schedule delivery contracts, crate bulk rates, and vehicle dispatch support for supermarkets, catering enterprises, and hotel food chains.
-            </p>
-          </div>
+        {/* Wholesale & Commercial Banner */}
+        <div className="mt-16 bg-[#0A2217] rounded-3xl p-8 sm:p-10 border border-[#D4AF37]/20 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-[#D4AF37]/5 rounded-full blur-3xl pointer-events-none"></div>
 
-          <button
-            type="button"
-            onClick={onOpenBulkInquiry}
-            className="px-7 py-4 rounded-full bg-[#D4AF37] hover:bg-[#E5C158] text-[#0D2B1D] font-extrabold text-xs uppercase tracking-widest transition-all whitespace-nowrap shrink-0 flex items-center gap-2 cursor-pointer shadow-lg relative z-10"
-          >
-            <span>Request Commercial Quote</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2 mb-2">
+                <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
+                <span className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider">Commercial Supply Contracts</span>
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
+                Supplying Supermarkets, Hotels, Caterers & Institutions
+              </h3>
+              <p className="mt-2 text-sm text-[#FDFBF5]/75 leading-relaxed">
+                Need 50 to 500+ crates of eggs weekly, bulk dressed chicken for restaurants, or contract supply for school cafeterias across Kaduna and Abuja? We offer customized contracts and farm-gate wholesale discounts.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-4 shrink-0">
+              <button
+                type="button"
+                onClick={onOpenBulkInquiry}
+                className="px-8 py-4 rounded-full bg-[#D4AF37] hover:bg-[#E5C158] text-[#0D2B1D] font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl cursor-pointer"
+              >
+                <span>Request Wholesale Quotation</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Product Detail Modal */}
-      <ProductModal
-        product={activeModalProduct}
-        onClose={() => setActiveModalProduct(null)}
-        onSelectForQuote={onSelectForQuote}
-      />
+      {activeModalProduct && (
+        <ProductModal
+          product={activeModalProduct}
+          onClose={() => setActiveModalProduct(null)}
+          onSelectForQuote={onSelectForQuote}
+        />
+      )}
     </section>
   );
 };

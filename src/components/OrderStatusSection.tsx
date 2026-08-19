@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { OrderStatusRecord } from '../types';
 import { useFarmConfig } from '../context/FarmConfigContext';
+import { useToast } from '../context/ToastContext';
 import { OrderStatusSkeleton } from './skeletons/LoadingSkeletons';
 import {
   Search,
@@ -19,6 +20,7 @@ import {
 
 export const OrderStatusSection: React.FC = () => {
   const { config, orders } = useFarmConfig();
+  const toast = useToast();
   const [query, setQuery] = useState<string>('YIFA-8421');
   const [searchedRecord, setSearchedRecord] = useState<OrderStatusRecord | null>(null);
   const [isSearching, setIsSearching] = useState<boolean>(true);
@@ -27,16 +29,19 @@ export const OrderStatusSection: React.FC = () => {
   // Initialize with first order if available
   useEffect(() => {
     if (orders.length > 0 && !searchedRecord) {
-      handleSearch(undefined, orders[0].id);
+      handleSearch(undefined, orders[0].id, false);
     } else {
       setIsSearching(false);
     }
   }, [orders]);
 
-  const handleSearch = (e?: React.FormEvent, explicitCode?: string) => {
+  const handleSearch = (e?: React.FormEvent, explicitCode?: string, showToastFeedback: boolean = true) => {
     if (e) e.preventDefault();
     const codeToSearch = (explicitCode || query).trim().toUpperCase();
-    if (!codeToSearch) return;
+    if (!codeToSearch) {
+      toast.error('Please enter an Invoice / Order reference code (e.g. YIFA-8421).', 'Missing Code');
+      return;
+    }
 
     setIsSearching(true);
     setTimeout(() => {
@@ -84,6 +89,10 @@ export const OrderStatusSection: React.FC = () => {
           vehicleNote: liveMatch.vehicleNote || 'Farm Dispatch Vehicle',
           paymentStatus: liveMatch.paymentStatus as any
         });
+
+        if (showToastFeedback) {
+          toast.success(`Found live dispatch status for Order #${liveMatch.id} (${stageName})`, 'Order Located');
+        }
       } else {
         // Fallback for custom code
         const stageNum: 1 | 2 | 3 | 4 = 2;
@@ -102,6 +111,10 @@ export const OrderStatusSection: React.FC = () => {
           vehicleNote: 'Farm Dispatch Vehicle',
           paymentStatus: 'Paid'
         });
+
+        if (showToastFeedback) {
+          toast.info(`Showing simulated dispatch batch for #${codeToSearch}`, 'Status Retrieved');
+        }
       }
       setIsSearching(false);
       setHasSearched(true);

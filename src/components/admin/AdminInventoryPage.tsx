@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useFarmConfig } from '../../context/FarmConfigContext';
+import { useToast } from '../../context/ToastContext';
 import { InventoryItem } from '../../types';
+import { AdminCreateItemModal } from './AdminCreateItemModal';
 import {
   Package,
   AlertTriangle,
@@ -20,93 +22,100 @@ import {
   ShieldAlert,
   Clock,
   Zap,
-  TrendingUp
+  TrendingUp,
+  Image as ImageIcon,
+  Trash2,
+  Eye,
+  ExternalLink
 } from 'lucide-react';
 
 export const AdminInventoryPage: React.FC = () => {
   const {
     inventory,
     updateInventoryStock,
-    updateInventoryPricing,
-    updateInventoryFreshness,
+    deleteInventoryItem,
     lowStockCount,
     currentStaffUser
   } = useFarmConfig();
+  const toast = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedFreshnessFilter, setSelectedFreshnessFilter] = useState<string>('all');
-  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
-  // Edit State
-  const [editStock, setEditStock] = useState<number>(0);
-  const [editUnitPrice, setEditUnitPrice] = useState<number>(0);
-  const [editWholesalePrice, setEditWholesalePrice] = useState<number>(0);
-  const [editUnitCost, setEditUnitCost] = useState<number>(0);
-  const [restockReason, setRestockReason] = useState<string>('Morning Harvest / Farm Gate Collection');
+  // Modal State for Create & Full Edit
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [itemToEdit, setItemToEdit] = useState<InventoryItem | null>(null);
 
-  // Freshness metadata edit state
-  const [editBatchNumber, setEditBatchNumber] = useState<string>('');
-  const [editHarvestDate, setEditHarvestDate] = useState<string>('');
-  const [editExpiryDate, setEditExpiryDate] = useState<string>('');
-  const [editShelfLifeDays, setEditShelfLifeDays] = useState<number>(14);
-  const [editFreshnessStatus, setEditFreshnessStatus] = useState<'freshly_harvested' | 'optimal' | 'expiring_soon' | 'expired'>('optimal');
+  // Quick Restock State
+  const [quickAdjustItem, setQuickAdjustItem] = useState<InventoryItem | null>(null);
+  const [quickDelta, setQuickDelta] = useState<number>(10);
+  const [quickReason, setQuickReason] = useState<string>('Morning Harvest / Collection');
 
   const filteredInventory = useMemo(() => {
-    return inventory.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (item.batchNumber && item.batchNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+    return inventory.filter((item) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q) ||
+        (item.batchNumber && item.batchNumber.toLowerCase().includes(q));
       const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-      const matchesFreshness = selectedFreshnessFilter === 'all' || item.freshnessStatus === selectedFreshnessFilter;
+      const matchesFreshness =
+        selectedFreshnessFilter === 'all' || item.freshnessStatus === selectedFreshnessFilter;
       return matchesSearch && matchesCategory && matchesFreshness;
     });
   }, [inventory, searchQuery, selectedCategory, selectedFreshnessFilter]);
 
   // Inventory Asset Value calculations
   const totalAssetValue = useMemo(() => {
-    return inventory.reduce((acc, item) => acc + (item.currentStock * item.unitPrice), 0);
+    return inventory.reduce((acc, item) => acc + item.currentStock * item.unitPrice, 0);
   }, [inventory]);
 
-  const totalCostValue = useMemo(() => {
-    return inventory.reduce((acc, item) => acc + (item.currentStock * item.unitCost), 0);
-  }, [inventory]);
-
-  const handleOpenEditModal = (item: InventoryItem) => {
-    setEditingItem(item);
-    setEditStock(item.currentStock);
-    setEditUnitPrice(item.unitPrice);
-    setEditWholesalePrice(item.wholesalePrice);
-    setEditUnitCost(item.unitCost);
-    setEditBatchNumber(item.batchNumber || `BATCH-${Date.now().toString().slice(-4)}`);
-    setEditHarvestDate(item.harvestDate || 'Today');
-    setEditExpiryDate(item.expiryDate || '30 Days');
-    setEditShelfLifeDays(item.shelfLifeDays || 14);
-    setEditFreshnessStatus(item.freshnessStatus || 'optimal');
+  const handleOpenCreateModal = () => {
+    setItemToEdit(null);
+    setIsModalOpen(true);
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleOpenEditModal = (item: InventoryItem) => {
+    setItemToEdit(item);
+    setIsModalOpen(true);
+  };
+
+  const handleQuickAdjust = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem) return;
-
-    // 1. Update stock if changed
-    if (editStock !== editingItem.currentStock) {
-      updateInventoryStock(editingItem.id, editStock, false, restockReason);
+    if (!quickAdjustItem) return;
+    try {
+      updateInventoryStock(quickAdjustItem.id, quickDelta, true, quickReason);
+      const sign = quickDelta >= 0 ? `+${quickDelta}` : `${quickDelta}`;
+      toast.success(`Updated "${quickAdjustItem.name}" stock by ${sign} ${quickAdjustItem.unit}.`, 'Inventory Adjusted');
+      setQuickAdjustItem(null);
+    } catch {
+      toast.error(`Failed to adjust stock for ${quickAdjustItem.name}.`, 'Update Error');
     }
+  };
 
-    // 2. Update pricing
-    updateInventoryPricing(editingItem.id, editUnitPrice, editWholesalePrice, editUnitCost);
-
-    // 3. Update Freshness & Expiry metadata
-    updateInventoryFreshness(editingItem.id, {
-      batchNumber: editBatchNumber,
-      harvestDate: editHarvestDate,
-      expiryDate: editExpiryDate,
-      shelfLifeDays: editShelfLifeDays,
-      freshnessStatus: editFreshnessStatus
+  const handleDeleteItem = async (item: InventoryItem) => {
+    const proceed = await toast.confirmAction({
+      title: 'Remove Product & Inventory Record',
+      message: `Are you sure you want to permanently remove "${item.name}" from live inventory and the public storefront catalog?`,
+      confirmText: 'Yes, Delete Item',
+      cancelText: 'Cancel',
+      type: 'danger'
     });
 
-    setEditingItem(null);
+    if (proceed) {
+      try {
+        const ok = deleteInventoryItem(item.id);
+        if (ok) {
+          toast.success(`"${item.name}" was removed from inventory.`, 'Item Removed');
+        } else {
+          toast.error(`Could not delete "${item.name}".`, 'Deletion Failed');
+        }
+      } catch {
+        toast.error('An error occurred while deleting the inventory item.', 'Error');
+      }
+    }
   };
 
   const getStockStatusBadge = (item: InventoryItem) => {
@@ -122,14 +131,14 @@ export const AdminInventoryPage: React.FC = () => {
       return (
         <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 w-fit">
           <AlertTriangle className="w-3 h-3" />
-          Low Stock Warning
+          Low Stock Alert
         </span>
       );
     }
     return (
       <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
         <CheckCircle2 className="w-3 h-3" />
-        Optimal Stock
+        In Stock
       </span>
     );
   };
@@ -138,29 +147,29 @@ export const AdminInventoryPage: React.FC = () => {
     switch (status) {
       case 'freshly_harvested':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
             <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
             Fresh Harvest
           </span>
         );
       case 'expiring_soon':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
             <Clock className="w-2.5 h-2.5 text-amber-400" />
             Expiring Soon
           </span>
         );
       case 'expired':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
             <ShieldAlert className="w-2.5 h-2.5 text-rose-400" />
-            Depleted/Expired
+            Expired
           </span>
         );
       default:
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
-            Optimal Quality
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
+            Optimal
           </span>
         );
     }
@@ -168,38 +177,53 @@ export const AdminInventoryPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0D2B1D] p-6 rounded-3xl border border-white/10 shadow-xl">
+      {/* Top Header & Actions */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#0D2B1D] p-6 rounded-3xl border border-white/10 shadow-xl">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] uppercase font-bold text-[#D4AF37] tracking-[0.25em]">
               Central Agribusiness Logistics
             </span>
             <span className="px-2 py-0.5 rounded-full bg-white/10 text-white text-xs font-mono">
-              {inventory.length} Tracked SKUs
+              {inventory.length} SKUs Live
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1">
-            Inventory & Perishables Tracker
+            Inventory & Stock Catalog
           </h1>
-          <p className="text-xs text-[#FDFBF5]/70 mt-0.5">
-            Auto-reducing inventory on orders, shelf-life freshness monitoring, and reorder thresholds.
+          <p className="text-xs text-[#FDFBF5]/70 mt-0.5 max-w-xl">
+            Live operations database synced in real time with the storefront catalog. Track stock levels, pricing, freshness, and photos.
           </p>
         </div>
 
-        {/* Quick Metrics Bar */}
-        <div className="flex items-center gap-3">
-          <div className="bg-[#071810] px-4 py-3 rounded-2xl border border-white/10 text-right">
-            <div className="text-[10px] text-[#FDFBF5]/50 uppercase font-mono">Total Stock Value</div>
-            <div className="text-base font-black font-mono text-[#D4AF37]">₦{totalAssetValue.toLocaleString()}</div>
+        {/* Metrics & Create Button */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-[#071810] px-4 py-2.5 rounded-2xl border border-white/10 text-right">
+            <div className="text-[10px] text-[#FDFBF5]/50 uppercase font-mono">Total Asset Value</div>
+            <div className="text-sm sm:text-base font-black font-mono text-[#D4AF37]">
+              ₦{totalAssetValue.toLocaleString()}
+            </div>
           </div>
 
-          <div className="bg-[#071810] px-4 py-3 rounded-2xl border border-white/10 text-right">
-            <div className="text-[10px] text-[#FDFBF5]/50 uppercase font-mono">Low Stock Flags</div>
-            <div className={`text-base font-black font-mono ${lowStockCount > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+          <div className="bg-[#071810] px-4 py-2.5 rounded-2xl border border-white/10 text-right">
+            <div className="text-[10px] text-[#FDFBF5]/50 uppercase font-mono">Low Stock</div>
+            <div
+              className={`text-sm sm:text-base font-black font-mono ${
+                lowStockCount > 0 ? 'text-amber-400' : 'text-emerald-400'
+              }`}
+            >
               {lowStockCount} {lowStockCount === 1 ? 'Item' : 'Items'}
             </div>
           </div>
+
+          {/* Create New Item Button */}
+          <button
+            onClick={handleOpenCreateModal}
+            className="px-5 py-3 rounded-2xl bg-[#D4AF37] hover:bg-[#E5C158] text-[#0D2B1D] font-black text-xs sm:text-sm uppercase tracking-wider shadow-xl flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create New Item</span>
+          </button>
         </div>
       </div>
 
@@ -213,7 +237,7 @@ export const AdminInventoryPage: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search produce name, category, or batch number..."
+              placeholder="Search product name, category, or batch number..."
               className="w-full bg-[#071810] border border-white/10 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder:text-[#FDFBF5]/40 focus:outline-none focus:border-[#D4AF37]"
             />
           </div>
@@ -225,13 +249,15 @@ export const AdminInventoryPage: React.FC = () => {
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="w-full bg-[#071810] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37] cursor-pointer"
             >
-              <option value="all">All Farm Categories</option>
-              <option value="eggs">Layer Eggs</option>
-              <option value="chicken">Dressed Chicken & Portions</option>
-              <option value="poultry">Live Birds & Broilers</option>
-              <option value="fish">Table Catfish</option>
-              <option value="vegetables">Fresh Vegetables</option>
+              <option value="all">All Categories</option>
+              <option value="eggs">Eggs (Table Crates)</option>
+              <option value="chicken">Dressed Frozen Chicken</option>
+              <option value="poultry">Live Poultry & Broilers</option>
+              <option value="fish">Fresh Catfish & Tilapia</option>
+              <option value="vegetables">Field Vegetables & Greens</option>
               <option value="livestock">Rams & Goats</option>
+              <option value="dairy">Dairy & Yoghurt</option>
+              <option value="feed">Animal Feeds</option>
             </select>
           </div>
 
@@ -244,333 +270,251 @@ export const AdminInventoryPage: React.FC = () => {
             >
               <option value="all">All Freshness Levels</option>
               <option value="freshly_harvested">Freshly Harvested Today</option>
-              <option value="optimal">Optimal Quality</option>
-              <option value="expiring_soon">Expiring Soon (5 Days or less)</option>
+              <option value="optimal">Optimal Condition</option>
+              <option value="expiring_soon">Expiring Soon</option>
+              <option value="expired">Expired</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Inventory Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredInventory.map((item) => {
-          const margin = item.unitPrice > 0 ? Math.round(((item.unitPrice - item.unitCost) / item.unitPrice) * 100) : 0;
-          const isLow = item.currentStock <= item.lowStockThreshold;
-
-          return (
-            <div
-              key={item.id}
-              className={`bg-[#0D2B1D] border rounded-3xl p-5 shadow-xl transition-all flex flex-col justify-between space-y-4 ${
-                isLow ? 'border-amber-500/40 bg-gradient-to-b from-[#162a1a] to-[#0D2B1D]' : 'border-white/10'
-              }`}
-            >
-              {/* Card Top: Image, Name & Badges */}
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    {item.image ? (
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-12 h-12 rounded-2xl object-cover border border-white/15 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#D4AF37]">
-                        <Package className="w-6 h-6" />
+      {/* Inventory Table */}
+      <div className="bg-[#0D2B1D] border border-white/10 rounded-3xl overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-[#FDFBF5]/90">
+            <thead className="bg-[#071810] text-[#FDFBF5]/60 uppercase tracking-wider text-[10px] border-b border-white/10 font-bold">
+              <tr>
+                <th className="py-4 px-4">Item & Photo</th>
+                <th className="py-4 px-4">Category</th>
+                <th className="py-4 px-4 text-center">Stock Level</th>
+                <th className="py-4 px-4 text-right">Selling Price</th>
+                <th className="py-4 px-4 text-right">Wholesale Rate</th>
+                <th className="py-4 px-4 text-center">Freshness / Batch</th>
+                <th className="py-4 px-4 text-center">Status</th>
+                <th className="py-4 px-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {filteredInventory.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-[#FDFBF5]/60 space-y-3">
+                    <Package className="w-8 h-8 text-[#D4AF37] mx-auto opacity-60" />
+                    <p className="text-sm font-semibold text-white">No inventory items found.</p>
+                    <button
+                      onClick={handleOpenCreateModal}
+                      className="px-4 py-2 rounded-xl bg-[#D4AF37] text-[#0D2B1D] font-bold text-xs uppercase tracking-wider cursor-pointer"
+                    >
+                      Create First Product
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                filteredInventory.map((item) => (
+                  <tr key={item.id} className="hover:bg-white/[0.03] transition-colors">
+                    {/* Item Photo & Title */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-black/40 border border-white/10 shrink-0 relative group">
+                          {item.image ? (
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[#FDFBF5]/40">
+                              <ImageIcon className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-sm">{item.name}</div>
+                          <div className="text-[11px] text-[#FDFBF5]/50 flex items-center gap-2 mt-0.5">
+                            <span>Per {item.unit}</span>
+                            <span>•</span>
+                            <span className="font-mono text-[10px]">Threshold: {item.lowStockThreshold}</span>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    <div>
-                      <h3 className="font-bold text-white text-sm leading-tight">{item.name}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] uppercase font-mono text-[#D4AF37] font-bold">
-                          {item.category}
+                    </td>
+
+                    {/* Category */}
+                    <td className="py-3.5 px-4">
+                      <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-bold uppercase text-[#D4AF37] tracking-wider">
+                        {item.category}
+                      </span>
+                    </td>
+
+                    {/* Stock Level & Quick +/- */}
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => updateInventoryStock(item.id, -1, true, 'Quick decrement')}
+                          disabled={item.currentStock <= 0}
+                          className="w-6 h-6 rounded-md bg-white/5 hover:bg-white/10 disabled:opacity-30 text-white flex items-center justify-center font-bold cursor-pointer"
+                          title="Reduce 1"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+
+                        <span className="font-mono font-black text-sm px-2 text-white min-w-[40px]">
+                          {item.currentStock}
                         </span>
+
+                        <button
+                          onClick={() => updateInventoryStock(item.id, 1, true, 'Quick increment')}
+                          className="w-6 h-6 rounded-md bg-white/5 hover:bg-white/10 text-white flex items-center justify-center font-bold cursor-pointer"
+                          title="Add 1"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
+
+                    {/* Selling Price */}
+                    <td className="py-3.5 px-4 text-right font-mono font-bold text-white text-sm">
+                      ₦{item.unitPrice.toLocaleString()}
+                    </td>
+
+                    {/* Wholesale Rate */}
+                    <td className="py-3.5 px-4 text-right font-mono text-xs text-[#D4AF37]">
+                      ₦{(item.wholesalePrice || item.unitPrice).toLocaleString()}
+                    </td>
+
+                    {/* Freshness / Batch */}
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        {getFreshnessBadge(item.freshnessStatus)}
                         {item.batchNumber && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/10 text-[#FDFBF5]/60 font-mono">
+                          <span className="text-[10px] font-mono text-[#FDFBF5]/40">
                             {item.batchNumber}
                           </span>
                         )}
                       </div>
-                    </div>
-                  </div>
+                    </td>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditModal(item)}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-[#D4AF37] hover:text-[#0D2B1D] text-white transition-colors cursor-pointer border border-white/10 shrink-0"
-                    title="Edit Stock, Pricing, & Freshness Logs"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                </div>
+                    {/* Stock Status Badge */}
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex justify-center">{getStockStatusBadge(item)}</div>
+                    </td>
 
-                {/* Stock Level & Freshness Meters */}
-                <div className="bg-[#071810] p-3.5 rounded-2xl border border-white/10 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] uppercase font-mono text-[#FDFBF5]/50">Current Stock Level</div>
-                      <div className="text-xl font-black font-mono text-white mt-0.5">
-                        {item.currentStock}{' '}
-                        <span className="text-xs font-normal text-[#FDFBF5]/60">{item.unit}</span>
+                    {/* Action Buttons */}
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {/* Quick Restock Dialog */}
+                        <button
+                          onClick={() => setQuickAdjustItem(item)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#D4AF37]/20 hover:text-[#D4AF37] text-[#FDFBF5]/70 transition-colors cursor-pointer"
+                          title="Quick Restock / Stock Adjustment"
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Full Edit Modal */}
+                        <button
+                          onClick={() => handleOpenEditModal(item)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#D4AF37]/20 hover:text-[#D4AF37] text-[#FDFBF5]/70 transition-colors cursor-pointer"
+                          title="Edit Specifications & Photo"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Delete Item */}
+                        <button
+                          onClick={() => handleDeleteItem(item)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 text-[#FDFBF5]/40 transition-colors cursor-pointer"
+                          title="Delete from Catalog"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                    </div>
-                    <div>{getStockStatusBadge(item)}</div>
-                  </div>
-
-                  {/* Freshness Badge & Shelf Life */}
-                  <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3 h-3 text-[#D4AF37]" />
-                      <span className="text-[11px] text-[#FDFBF5]/70">
-                        {item.harvestDate || 'Harvested recently'}
-                      </span>
-                    </div>
-                    <div>{getFreshnessBadge(item.freshnessStatus)}</div>
-                  </div>
-
-                  {item.expiryDate && (
-                    <div className="text-[10px] text-[#FDFBF5]/50 flex items-center justify-between">
-                      <span>Shelf-life / Expiry:</span>
-                      <span className="font-mono text-[#FDFBF5]/80">{item.expiryDate}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Pricing & Margin Breakdown */}
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-white/5 p-2 rounded-xl border border-white/5">
-                    <div className="text-[9px] uppercase font-mono text-[#FDFBF5]/50">Retail</div>
-                    <div className="font-bold text-white font-mono mt-0.5">₦{item.unitPrice.toLocaleString()}</div>
-                  </div>
-                  <div className="bg-white/5 p-2 rounded-xl border border-white/5">
-                    <div className="text-[9px] uppercase font-mono text-[#FDFBF5]/50">Wholesale</div>
-                    <div className="font-bold text-[#D4AF37] font-mono mt-0.5">₦{item.wholesalePrice.toLocaleString()}</div>
-                  </div>
-                  <div className="bg-white/5 p-2 rounded-xl border border-white/5">
-                    <div className="text-[9px] uppercase font-mono text-[#FDFBF5]/50">Gross Margin</div>
-                    <div className="font-bold text-emerald-400 font-mono mt-0.5">+{margin}%</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card Bottom: Quick Stock Adjusters */}
-              <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-2">
-                <span className="text-[10px] uppercase font-mono text-[#FDFBF5]/50">Quick Restock:</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => updateInventoryStock(item.id, -5, true, 'Spoilage / Damaged Goods')}
-                    disabled={item.currentStock < 5}
-                    className="px-2 py-1 bg-white/5 hover:bg-rose-500/20 text-rose-300 border border-white/10 rounded-lg text-xs font-mono font-bold cursor-pointer disabled:opacity-30"
-                    title="Deduct 5 units"
-                  >
-                    -5
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateInventoryStock(item.id, 10, true, 'Daily Pen / Field Harvest')}
-                    className="px-2.5 py-1 bg-white/5 hover:bg-[#D4AF37] hover:text-[#0D2B1D] text-white border border-white/10 rounded-lg text-xs font-mono font-bold cursor-pointer"
-                    title="Add 10 units"
-                  >
-                    +10
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateInventoryStock(item.id, 50, true, 'Bulk Harvest / Batch Delivery')}
-                    className="px-2.5 py-1 bg-[#D4AF37]/20 hover:bg-[#D4AF37] hover:text-[#0D2B1D] text-[#D4AF37] border border-[#D4AF37]/30 rounded-lg text-xs font-mono font-bold cursor-pointer"
-                    title="Add 50 units"
-                  >
-                    +50
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* EDIT INVENTORY & FRESHNESS MODAL */}
-      {editingItem && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#0D2B1D] border border-white/15 rounded-3xl w-full max-w-2xl shadow-2xl p-6 space-y-6 my-auto max-h-[92vh] overflow-y-auto animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+      {/* Quick Restock Popover Modal */}
+      {quickAdjustItem && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0D2B1D] border border-white/15 rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Package className="w-5 h-5 text-[#D4AF37]" />
-                  <span>Update Stock & Freshness: {editingItem.name}</span>
+                <h3 className="text-base font-bold text-white uppercase tracking-wider">
+                  Quick Stock Adjustment
                 </h3>
                 <p className="text-xs text-[#FDFBF5]/60 mt-0.5">
-                  Category: {editingItem.category} • Unit: {editingItem.unit}
+                  {quickAdjustItem.name} ({quickAdjustItem.currentStock} {quickAdjustItem.unit} currently)
                 </p>
               </div>
               <button
-                type="button"
-                onClick={() => setEditingItem(null)}
-                className="p-2 text-[#FDFBF5]/60 hover:text-white rounded-xl hover:bg-white/10 cursor-pointer"
+                onClick={() => setQuickAdjustItem(null)}
+                className="p-1.5 text-[#FDFBF5]/60 hover:text-white rounded-lg hover:bg-white/10 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-5">
-              {/* Section 1: Stock Level & Reason */}
-              <div className="bg-[#071810] p-4 rounded-2xl border border-white/10 space-y-3">
-                <h4 className="text-xs uppercase font-bold text-[#D4AF37] tracking-wider">
-                  1. Stock Level Adjustment
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">
-                      Exact Current Stock Count ({editingItem.unit}):
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editStock}
-                      onChange={(e) => setEditStock(parseInt(e.target.value) || 0)}
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white font-mono font-bold focus:outline-none focus:border-[#D4AF37]"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">
-                      Adjustment Reason:
-                    </label>
-                    <input
-                      type="text"
-                      value={restockReason}
-                      onChange={(e) => setRestockReason(e.target.value)}
-                      placeholder="e.g. Morning harvest collection, Spoilage"
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
-                    />
-                  </div>
-                </div>
+            <form onSubmit={handleQuickAdjust} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[#FDFBF5]/80 uppercase tracking-wider block mb-1">
+                  Stock Adjustment Delta (+ or -)
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={quickDelta}
+                  onChange={(e) => setQuickDelta(Number(e.target.value))}
+                  placeholder="e.g. +25 or -5"
+                  className="w-full bg-[#071810] border border-white/15 rounded-xl px-4 py-2.5 text-sm text-white font-mono font-bold focus:outline-none focus:border-[#D4AF37]"
+                />
+                <span className="text-[10px] text-[#FDFBF5]/50 mt-1 block">
+                  New stock will be: {Math.max(0, quickAdjustItem.currentStock + quickDelta)} {quickAdjustItem.unit}
+                </span>
               </div>
 
-              {/* Section 2: Perishables & Freshness Tracking */}
-              <div className="bg-[#071810] p-4 rounded-2xl border border-white/10 space-y-3">
-                <h4 className="text-xs uppercase font-bold text-[#D4AF37] tracking-wider flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>2. Perishable Freshness & Batch Tracking</span>
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">
-                      Batch Code / Pen Unit ID:
-                    </label>
-                    <input
-                      type="text"
-                      value={editBatchNumber}
-                      onChange={(e) => setEditBatchNumber(e.target.value)}
-                      placeholder="e.g. EGG-2024-0818-A"
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#D4AF37]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">
-                      Freshness Classification:
-                    </label>
-                    <select
-                      value={editFreshnessStatus}
-                      onChange={(e) => setEditFreshnessStatus(e.target.value as typeof editFreshnessStatus)}
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] cursor-pointer"
-                    >
-                      <option value="freshly_harvested">Freshly Harvested Today</option>
-                      <option value="optimal">Optimal Storage Condition</option>
-                      <option value="expiring_soon">Expiring Soon (Within 5 Days)</option>
-                      <option value="expired">Depleted / Expired</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">
-                      Harvest / Packaging Time:
-                    </label>
-                    <input
-                      type="text"
-                      value={editHarvestDate}
-                      onChange={(e) => setEditHarvestDate(e.target.value)}
-                      placeholder="e.g. Today 06:00 AM"
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">
-                      Best Before / Expiry Note:
-                    </label>
-                    <input
-                      type="text"
-                      value={editExpiryDate}
-                      onChange={(e) => setEditExpiryDate(e.target.value)}
-                      placeholder="e.g. 30 Days (Best Before Sep 17)"
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
-                    />
-                  </div>
-                </div>
+              <div>
+                <label className="text-xs font-bold text-[#FDFBF5]/80 uppercase tracking-wider block mb-1">
+                  Reason for Adjustment
+                </label>
+                <input
+                  type="text"
+                  value={quickReason}
+                  onChange={(e) => setQuickReason(e.target.value)}
+                  placeholder="e.g. Morning harvest collection, Spoilage"
+                  className="w-full bg-[#071810] border border-white/15 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
+                />
               </div>
 
-              {/* Section 3: Pricing & Unit Cost */}
-              <div className="bg-[#071810] p-4 rounded-2xl border border-white/10 space-y-3">
-                <h4 className="text-xs uppercase font-bold text-[#D4AF37] tracking-wider">
-                  3. Pricing & Production Cost (NGN)
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">Unit Cost (Farm Cost):</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editUnitCost}
-                      onChange={(e) => setEditUnitCost(parseInt(e.target.value) || 0)}
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#D4AF37]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">Retail Selling Price:</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editUnitPrice}
-                      onChange={(e) => setEditUnitPrice(parseInt(e.target.value) || 0)}
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#D4AF37]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-[#FDFBF5]/70 mb-1">Wholesale Selling Price:</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={editWholesalePrice}
-                      onChange={(e) => setEditWholesalePrice(parseInt(e.target.value) || 0)}
-                      className="w-full bg-[#0D2B1D] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#D4AF37]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setEditingItem(null)}
-                  className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold cursor-pointer"
+                  onClick={() => setQuickAdjustItem(null)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#D4AF37] hover:bg-[#E5C158] text-[#0D2B1D] text-xs font-black uppercase tracking-wider cursor-pointer shadow-lg"
+                  className="px-5 py-2 rounded-xl bg-[#D4AF37] hover:bg-[#E5C158] text-[#0D2B1D] font-black text-xs uppercase tracking-wider cursor-pointer"
                 >
-                  Save Changes
+                  Confirm Adjustment
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Main Create / Edit Full Modal */}
+      <AdminCreateItemModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        itemToEdit={itemToEdit}
+      />
     </div>
   );
 };

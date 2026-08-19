@@ -1,6 +1,7 @@
 import React from 'react';
 import { whyChooseUsData } from '../data/farmData';
 import { TestimonialCarousel } from './TestimonialCarousel';
+import { CustomerTestimonials } from './CustomerTestimonials';
 import { ShieldCheck, MapPin, Truck, SunMedium, Users, TrendingUp, CheckCircle2 } from 'lucide-react';
 
 export const WhyChooseUs: React.FC = () => {
@@ -73,6 +74,9 @@ export const WhyChooseUs: React.FC = () => {
 
         {/* Auto-playing Testimonial Carousel for Kaduna Caterers & Families */}
         <TestimonialCarousel />
+
+        {/* Full Community Review Feed with Photos and Ratings */}
+        <CustomerTestimonials />
 
         {/* Agribusiness verification banner */}
         <div className="mt-14 p-6 sm:p-8 rounded-3xl bg-[#0A2217] border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left shadow-2xl">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFarmConfig } from '../../context/FarmConfigContext';
+import { useToast } from '../../context/ToastContext';
 import { StaffMember, StaffRole } from '../../types';
 import {
   Users,
@@ -19,6 +20,7 @@ import {
 
 export const AdminStaffPage: React.FC = () => {
   const { staffAccounts, addStaffAccount, updateStaffAccount, deleteStaffAccount, currentStaffUser } = useFarmConfig();
+  const toast = useToast();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
@@ -41,55 +43,83 @@ export const AdminStaffPage: React.FC = () => {
 
   const handleCreateStaff = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !email) return;
+    if (!fullName.trim() || !email.trim()) {
+      toast.error('Staff full name and email are required.', 'Missing Fields');
+      return;
+    }
 
-    addStaffAccount({
-      fullName,
-      email,
-      phone,
-      title,
-      role,
-      status: 'active',
-      permissions: {
-        canManageOrders: true,
-        canUpdateDispatch: true,
-        canManageInventory: role === 'admin',
-        canViewFinancials: role === 'admin',
-        canManageStaff: role === 'admin',
-        canExportReports: role === 'admin'
-      }
-    });
+    try {
+      addStaffAccount({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim() || '080-000-0000',
+        title: title.trim() || 'Logistics & Sales Coordinator',
+        role,
+        status: 'active',
+        permissions: {
+          canManageOrders: true,
+          canUpdateDispatch: true,
+          canManageInventory: role === 'admin',
+          canViewFinancials: role === 'admin',
+          canManageStaff: role === 'admin',
+          canExportReports: role === 'admin'
+        }
+      });
 
-    setIsAddModalOpen(false);
+      toast.success(`Authorized staff account created for ${fullName.trim()}.`, 'Staff Added');
+      setIsAddModalOpen(false);
+    } catch {
+      toast.error('Failed to create staff account.', 'Error');
+    }
   };
 
-  const handleToggleRole = (staff: StaffMember) => {
+  const handleToggleRole = async (staff: StaffMember) => {
     if (staff.id === currentStaffUser?.id) {
-      alert('You cannot modify your own primary role while logged in.');
+      toast.warning('You cannot modify your own primary role while logged in.', 'Action Prohibited');
       return;
     }
 
     const nextRole: StaffRole = staff.role === 'admin' ? 'staff' : 'admin';
-    updateStaffAccount(staff.id, {
-      role: nextRole,
-      permissions: {
-        canManageOrders: true,
-        canUpdateDispatch: true,
-        canManageInventory: nextRole === 'admin',
-        canViewFinancials: nextRole === 'admin',
-        canManageStaff: nextRole === 'admin',
-        canExportReports: nextRole === 'admin'
-      }
+    const proceed = await toast.confirmAction({
+      title: 'Change Access Role',
+      message: `Change ${staff.fullName}'s role from ${staff.role.toUpperCase()} to ${nextRole.toUpperCase()}?`,
+      confirmText: `Make ${nextRole.toUpperCase()}`,
+      cancelText: 'Cancel',
+      type: 'info'
     });
+
+    if (proceed) {
+      try {
+        updateStaffAccount(staff.id, {
+          role: nextRole,
+          permissions: {
+            canManageOrders: true,
+            canUpdateDispatch: true,
+            canManageInventory: nextRole === 'admin',
+            canViewFinancials: nextRole === 'admin',
+            canManageStaff: nextRole === 'admin',
+            canExportReports: nextRole === 'admin'
+          }
+        });
+        toast.success(`${staff.fullName} is now an ${nextRole.toUpperCase()}.`, 'Role Updated');
+      } catch {
+        toast.error('Failed to update staff role.', 'Error');
+      }
+    }
   };
 
   const handleToggleStatus = (staff: StaffMember) => {
     if (staff.id === currentStaffUser?.id) {
-      alert('You cannot deactivate your own active session.');
+      toast.warning('You cannot deactivate your own active session.', 'Action Prohibited');
       return;
     }
     const nextStatus = staff.status === 'active' ? 'inactive' : 'active';
-    updateStaffAccount(staff.id, { status: nextStatus });
+    try {
+      updateStaffAccount(staff.id, { status: nextStatus });
+      toast.info(`Staff account for ${staff.fullName} is now ${nextStatus.toUpperCase()}.`, 'Status Changed');
+    } catch {
+      toast.error('Failed to update status.', 'Error');
+    }
   };
 
   return (
@@ -219,9 +249,21 @@ export const AdminStaffPage: React.FC = () => {
 
                   {staff.id !== currentStaffUser.id && (
                     <button
-                      onClick={() => {
-                        if (window.confirm(`Delete staff account for ${staff.fullName}?`)) {
-                          deleteStaffAccount(staff.id);
+                      onClick={async () => {
+                        const proceed = await toast.confirmAction({
+                          title: 'Revoke Staff Access',
+                          message: `Are you sure you want to delete the staff account for ${staff.fullName} (${staff.email})?`,
+                          confirmText: 'Delete Account',
+                          cancelText: 'Cancel',
+                          type: 'danger'
+                        });
+                        if (proceed) {
+                          try {
+                            deleteStaffAccount(staff.id);
+                            toast.success(`Revoked staff account for ${staff.fullName}.`, 'Staff Removed');
+                          } catch {
+                            toast.error('Failed to remove staff account.', 'Error');
+                          }
                         }
                       }}
                       className="p-1.5 rounded-xl bg-white/5 hover:bg-rose-500/20 text-[#FDFBF5]/40 hover:text-rose-400 transition-colors cursor-pointer"

@@ -4,6 +4,8 @@ import {
   QuoteRequest,
   UnifiedOrder,
   InventoryItem,
+  ProductItem,
+  CustomerInquiry,
   StaffMember,
   AdminNotification,
   OrderStatus,
@@ -12,10 +14,12 @@ import {
   Supplier,
   PurchaseOrder,
   ActivityLog,
-  AutomatedNotificationLog
+  AutomatedNotificationLog,
+  ProductCategory
 } from '../types';
 import {
   initialFarmConfig,
+  productsData,
   initialInventoryData,
   initialStaffAccounts,
   initialUnifiedOrders,
@@ -24,7 +28,8 @@ import {
   initialSuppliers,
   initialPurchaseOrders,
   initialActivityLogs,
-  initialAutomatedNotifications
+  initialAutomatedNotifications,
+  initialCustomerInquiries
 } from '../data/farmData';
 
 interface SalesMetrics {
@@ -41,6 +46,25 @@ interface SalesMetrics {
   averageOrderValue: number;
 }
 
+export interface CreateItemPayload {
+  name: string;
+  category: ProductCategory;
+  unitPrice: number;
+  wholesalePrice?: number;
+  unitCost?: number;
+  unit: string;
+  currentStock: number;
+  lowStockThreshold: number;
+  description: string;
+  image: string;
+  badge?: string;
+  features?: string[];
+  harvestDate?: string;
+  shelfLifeDays?: number;
+  packaging?: string;
+  minOrder?: string;
+}
+
 interface FarmContextType {
   // Storefront Config
   config: FarmConfig;
@@ -50,7 +74,20 @@ interface FarmContextType {
   setIsConfigModalOpen: (open: boolean) => void;
   toggleBadgeVisibility: () => void;
 
-  // Quotes (Legacy compatibility)
+  // Unified Products Catalog (Storefront + Admin)
+  products: ProductItem[];
+  addProduct: (product: Omit<ProductItem, 'id'>) => ProductItem;
+  updateProduct: (id: string, updates: Partial<ProductItem>) => void;
+  deleteProduct: (id: string) => boolean;
+
+  // Unified Inquiries & Customer Messages (Public Site + Admin Inbox)
+  inquiries: CustomerInquiry[];
+  unreadInquiriesCount: number;
+  submitInquiry: (data: Omit<CustomerInquiry, 'id' | 'createdAt' | 'status'>) => Promise<CustomerInquiry>;
+  updateInquiryStatus: (id: string, status: CustomerInquiry['status'], replyNotes?: string) => void;
+  deleteInquiry: (id: string) => boolean;
+
+  // Quotes (Storefront quote form integration)
   quotesList: QuoteRequest[];
   submitQuote: (quote: QuoteRequest) => Promise<{ success: boolean; id: string }>;
 
@@ -75,6 +112,7 @@ interface FarmContextType {
 
   // Unified Inventory & Perishables
   inventory: InventoryItem[];
+  createInventoryAndProductItem: (payload: CreateItemPayload) => { inventoryItem: InventoryItem; productItem: ProductItem };
   updateInventoryStock: (inventoryId: string, deltaOrExact: number, isDelta?: boolean, reason?: string) => void;
   updateInventoryPricing: (inventoryId: string, unitPrice: number, wholesalePrice: number, unitCost?: number) => void;
   updateInventoryFreshness: (
@@ -87,6 +125,8 @@ interface FarmContextType {
       freshnessStatus?: 'freshly_harvested' | 'optimal' | 'expiring_soon' | 'expired';
     }
   ) => void;
+  updateInventoryItemFull: (inventoryId: string, updates: Partial<InventoryItem>) => void;
+  deleteInventoryItem: (inventoryId: string) => boolean;
   lowStockCount: number;
 
   // Customers & Loyalty
@@ -145,39 +185,48 @@ interface FarmContextType {
 
 const FarmConfigContext = createContext<FarmContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'yifa_farms_config_v2';
-const QUOTES_STORAGE_KEY = 'yifa_farms_quotes_v2';
-const ORDERS_STORAGE_KEY = 'yifa_farms_orders_v2';
-const INVENTORY_STORAGE_KEY = 'yifa_farms_inventory_v2';
-const STAFF_STORAGE_KEY = 'yifa_farms_staff_v2';
-const NOTIFICATIONS_STORAGE_KEY = 'yifa_farms_notifications_v2';
-const SESSION_STORAGE_KEY = 'yifa_farms_staff_session_v2';
-const SOUND_STORAGE_KEY = 'yifa_farms_sound_pref_v2';
-const CUSTOMERS_STORAGE_KEY = 'yifa_farms_customers_v2';
-const SUPPLIERS_STORAGE_KEY = 'yifa_farms_suppliers_v2';
-const POS_STORAGE_KEY = 'yifa_farms_pos_v2';
-const ACTIVITY_STORAGE_KEY = 'yifa_farms_activity_v2';
-const AUTONOTIFS_STORAGE_KEY = 'yifa_farms_autonotifs_v2';
+const STORAGE_KEY = 'yifa_farms_config_v3';
+const PRODUCTS_STORAGE_KEY = 'yifa_farms_products_v3';
+const QUOTES_STORAGE_KEY = 'yifa_farms_quotes_v3';
+const INQUIRIES_STORAGE_KEY = 'yifa_farms_inquiries_v3';
+const ORDERS_STORAGE_KEY = 'yifa_farms_orders_v3';
+const INVENTORY_STORAGE_KEY = 'yifa_farms_inventory_v3';
+const STAFF_STORAGE_KEY = 'yifa_farms_staff_v3';
+const NOTIFICATIONS_STORAGE_KEY = 'yifa_farms_notifications_v3';
+const SESSION_STORAGE_KEY = 'yifa_farms_staff_session_v3';
+const SOUND_STORAGE_KEY = 'yifa_farms_sound_pref_v3';
+const CUSTOMERS_STORAGE_KEY = 'yifa_farms_customers_v3';
+const SUPPLIERS_STORAGE_KEY = 'yifa_farms_suppliers_v3';
+const POS_STORAGE_KEY = 'yifa_farms_pos_v3';
+const ACTIVITY_STORAGE_KEY = 'yifa_farms_activity_v3';
+const AUTONOTIFS_STORAGE_KEY = 'yifa_farms_autonotifs_v3';
 
-// Simple synthesized Web Audio chime for incoming orders
-function playOrderChime() {
+// Simple synthesized Web Audio chime for incoming orders and inquiries
+function playAlertChime(isUrgent = false) {
   try {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    if (isUrgent) {
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+      osc.frequency.exponentialRampToValueAtTime(1046.5, ctx.currentTime + 0.15); // C6
+    } else {
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+    }
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.4);
   } catch {
-    // ignore audio failure if autoplay policy blocks
+    // ignore audio failure if browser autoplay policy blocks
   }
 }
 
@@ -193,7 +242,35 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return initialFarmConfig;
   });
 
-  // 2. Legacy Quotes List
+  // 2. Unified Products Catalog
+  const [products, setProducts] = useState<ProductItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // Fallback
+    }
+    return productsData;
+  });
+
+  // 3. Customer Inquiries & Messages
+  const [inquiries, setInquiries] = useState<CustomerInquiry[]>(() => {
+    try {
+      const saved = localStorage.getItem(INQUIRIES_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // Fallback
+    }
+    return initialCustomerInquiries;
+  });
+
+  // 4. Quotes List
   const [quotesList, setQuotesList] = useState<QuoteRequest[]>(() => {
     try {
       const savedQuotes = localStorage.getItem(QUOTES_STORAGE_KEY);
@@ -204,29 +281,35 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return [];
   });
 
-  // 3. Unified Orders
+  // 5. Unified Orders
   const [orders, setOrders] = useState<UnifiedOrder[]>(() => {
     try {
       const savedOrders = localStorage.getItem(ORDERS_STORAGE_KEY);
-      if (savedOrders) return JSON.parse(savedOrders);
+      if (savedOrders) {
+        const parsed = JSON.parse(savedOrders);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {
       // Fallback
     }
     return initialUnifiedOrders;
   });
 
-  // 4. Unified Inventory
+  // 6. Unified Inventory
   const [inventory, setInventory] = useState<InventoryItem[]>(() => {
     try {
       const savedInv = localStorage.getItem(INVENTORY_STORAGE_KEY);
-      if (savedInv) return JSON.parse(savedInv);
+      if (savedInv) {
+        const parsed = JSON.parse(savedInv);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {
       // Fallback
     }
     return initialInventoryData;
   });
 
-  // 5. Staff Accounts & Active Session
+  // 7. Staff Accounts & Session
   const [staffAccounts, setStaffAccounts] = useState<StaffMember[]>(() => {
     try {
       const savedStaff = localStorage.getItem(STAFF_STORAGE_KEY);
@@ -247,7 +330,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return null;
   });
 
-  // 6. Real-time Notifications
+  // 8. Real-time Notifications
   const [notifications, setNotifications] = useState<AdminNotification[]>(() => {
     try {
       const savedNotifs = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
@@ -258,7 +341,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return initialNotifications;
   });
 
-  // 7. Sound Preference
+  // 9. Sound Preference
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
       const savedSound = localStorage.getItem(SOUND_STORAGE_KEY);
@@ -269,7 +352,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return true;
   });
 
-  // 8. Customers Directory
+  // 10. Customers Directory
   const [customers, setCustomers] = useState<CustomerAccount[]>(() => {
     try {
       const savedCust = localStorage.getItem(CUSTOMERS_STORAGE_KEY);
@@ -280,7 +363,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return initialCustomers;
   });
 
-  // 9. Suppliers
+  // 11. Suppliers
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
     try {
       const savedSup = localStorage.getItem(SUPPLIERS_STORAGE_KEY);
@@ -291,7 +374,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return initialSuppliers;
   });
 
-  // 10. Purchase Orders
+  // 12. Purchase Orders
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
     try {
       const savedPOs = localStorage.getItem(POS_STORAGE_KEY);
@@ -302,7 +385,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return initialPurchaseOrders;
   });
 
-  // 11. Activity Logs
+  // 13. Activity Logs
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
     try {
       const savedAct = localStorage.getItem(ACTIVITY_STORAGE_KEY);
@@ -313,7 +396,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return initialActivityLogs;
   });
 
-  // 12. Automated Notification Logs
+  // 14. Automated Notification Logs
   const [automatedNotifications, setAutomatedNotifications] = useState<AutomatedNotificationLog[]>(() => {
     try {
       const savedANotifs = localStorage.getItem(AUTONOTIFS_STORAGE_KEY);
@@ -326,10 +409,39 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
+  // Cross-tab real-time sync with Storage Events and BroadcastChannel
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (!e.newValue) return;
+      try {
+        if (e.key === ORDERS_STORAGE_KEY) setOrders(JSON.parse(e.newValue));
+        if (e.key === PRODUCTS_STORAGE_KEY) setProducts(JSON.parse(e.newValue));
+        if (e.key === INVENTORY_STORAGE_KEY) setInventory(JSON.parse(e.newValue));
+        if (e.key === INQUIRIES_STORAGE_KEY) setInquiries(JSON.parse(e.newValue));
+        if (e.key === NOTIFICATIONS_STORAGE_KEY) setNotifications(JSON.parse(e.newValue));
+        if (e.key === CUSTOMERS_STORAGE_KEY) setCustomers(JSON.parse(e.newValue));
+        if (e.key === STORAGE_KEY) setConfig(JSON.parse(e.newValue));
+      } catch {
+        // ignore parse error
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // Persistence side-effects
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   }, [config]);
+
+  useEffect(() => {
+    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem(INQUIRIES_STORAGE_KEY, JSON.stringify(inquiries));
+  }, [inquiries]);
 
   useEffect(() => {
     localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(quotesList));
@@ -383,10 +495,14 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     localStorage.setItem(AUTONOTIFS_STORAGE_KEY, JSON.stringify(automatedNotifications));
   }, [automatedNotifications]);
 
-  // Notifications count
+  // Counts & Calculated fields
   const unreadNotificationsCount = useMemo(() => {
     return notifications.filter((n) => !n.read).length;
   }, [notifications]);
+
+  const unreadInquiriesCount = useMemo(() => {
+    return inquiries.filter((inq) => inq.status === 'new').length;
+  }, [inquiries]);
 
   const lowStockCount = useMemo(() => {
     return inventory.filter((i) => i.currentStock <= i.lowStockThreshold).length;
@@ -394,18 +510,21 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const toggleSound = () => setSoundEnabled((prev) => !prev);
 
-  const addNotification = useCallback((notif: Omit<AdminNotification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotif: AdminNotification = {
-      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      timestamp: 'Just now',
-      read: false,
-      ...notif
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
-    if (soundEnabled) {
-      playOrderChime();
-    }
-  }, [soundEnabled]);
+  const addNotification = useCallback(
+    (notif: Omit<AdminNotification, 'id' | 'timestamp' | 'read'>) => {
+      const newNotif: AdminNotification = {
+        id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        timestamp: 'Just now',
+        read: false,
+        ...notif
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+      if (soundEnabled) {
+        playAlertChime(notif.type === 'new_order' || notif.type === 'new_inquiry');
+      }
+    },
+    [soundEnabled]
+  );
 
   const markNotificationRead = (id: string) => {
     setNotifications((prev) =>
@@ -480,6 +599,164 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [orders, addActivityLog]
   );
 
+  // Products Management
+  const addProduct = useCallback(
+    (productData: Omit<ProductItem, 'id'>): ProductItem => {
+      const slug = productData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const id = `${slug}-${Date.now().toString().slice(-4)}`;
+      const newProduct: ProductItem = {
+        id,
+        ...productData
+      };
+      setProducts((prev) => [newProduct, ...prev]);
+      addActivityLog({
+        actionType: 'product_created',
+        description: `Added new product to catalog: "${newProduct.name}" (${newProduct.category}).`,
+        targetId: id
+      });
+      addNotification({
+        type: 'product_updated',
+        title: `Product Added: ${newProduct.name}`,
+        message: `New item is now active and live on the public storefront catalog.`
+      });
+      return newProduct;
+    },
+    [addActivityLog, addNotification]
+  );
+
+  const updateProduct = useCallback(
+    (id: string, updates: Partial<ProductItem>) => {
+      setProducts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
+      );
+      addActivityLog({
+        actionType: 'product_updated',
+        description: `Updated product specifications for ID #${id}.`,
+        targetId: id
+      });
+    },
+    [addActivityLog]
+  );
+
+  const deleteProduct = useCallback(
+    (id: string): boolean => {
+      const prod = products.find((p) => p.id === id);
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      addActivityLog({
+        actionType: 'product_deleted',
+        description: `Removed product "${prod?.name || id}" from storefront catalog.`,
+        targetId: id
+      });
+      return true;
+    },
+    [products, addActivityLog]
+  );
+
+  // Unified Customer Inquiries Management
+  const submitInquiry = useCallback(
+    async (
+      data: Omit<CustomerInquiry, 'id' | 'createdAt' | 'status'>
+    ): Promise<CustomerInquiry> => {
+      const generatedId = `INQ-${Math.floor(1000 + Math.random() * 9000)}`;
+      const now = new Date();
+
+      const newInquiry: CustomerInquiry = {
+        id: generatedId,
+        createdAt: now.toISOString(),
+        status: 'new',
+        ...data
+      };
+
+      setInquiries((prev) => [newInquiry, ...prev]);
+
+      // Trigger admin notification & sound alert
+      addNotification({
+        type: 'new_inquiry',
+        title: `New Customer Message: ${newInquiry.fullName}`,
+        message: `${newInquiry.subject} (${newInquiry.channel.toUpperCase()}) - ${newInquiry.phone}`,
+        inquiryId: generatedId
+      });
+
+      // Log in audit trail
+      addActivityLog({
+        actionType: 'inquiry_received',
+        description: `Received customer message from ${newInquiry.fullName} (${newInquiry.channel}): "${newInquiry.subject}".`,
+        targetId: generatedId
+      });
+
+      return newInquiry;
+    },
+    [addNotification, addActivityLog]
+  );
+
+  const updateInquiryStatus = useCallback(
+    (id: string, status: CustomerInquiry['status'], replyNotes?: string) => {
+      setInquiries((prev) =>
+        prev.map((inq) => {
+          if (inq.id === id) {
+            return {
+              ...inq,
+              status,
+              ...(replyNotes !== undefined && { replyNotes }),
+              ...(status === 'replied' && { repliedAt: 'Today, ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })
+            };
+          }
+          return inq;
+        })
+      );
+
+      addActivityLog({
+        actionType: 'inquiry_replied',
+        description: `Updated inquiry #${id} status to '${status.toUpperCase()}'.`,
+        targetId: id
+      });
+    },
+    [addActivityLog]
+  );
+
+  const deleteInquiry = useCallback(
+    (id: string): boolean => {
+      setInquiries((prev) => prev.filter((i) => i.id !== id));
+      return true;
+    },
+    []
+  );
+
+  // Legacy Quote Submission
+  const submitQuote = useCallback(
+    async (quote: QuoteRequest): Promise<{ success: boolean; id: string }> => {
+      const quoteId = `YIFA-QT-${Math.floor(1000 + Math.random() * 9000)}`;
+      const now = new Date();
+      const quoteWithMetadata: QuoteRequest = {
+        ...quote,
+        id: quoteId,
+        createdAt: now.toISOString(),
+        status: 'new'
+      };
+
+      setQuotesList((prev) => [quoteWithMetadata, ...prev]);
+
+      // Also log inquiry into unified messages inbox
+      await submitInquiry({
+        fullName: quote.fullName,
+        phone: quote.phoneOrWhatsapp,
+        email: quote.email,
+        channel: 'quote_request',
+        subject: `Quote Request for ${quote.quantity} ${quote.unit} ${quote.specificItem || quote.productCategory}`,
+        message: quote.message || `Customer requested quotation for ${quote.quantity} ${quote.unit} of ${quote.specificItem}. Delivery to: ${quote.deliveryLocation}. Frequency: ${quote.frequency}.`,
+        productCategory: quote.productCategory,
+        specificItem: quote.specificItem,
+        quantity: quote.quantity,
+        unit: quote.unit,
+        location: quote.deliveryLocation,
+        priority: 'high'
+      });
+
+      return { success: true, id: quoteId };
+    },
+    [submitInquiry]
+  );
+
   // Customer Management
   const addCustomer = useCallback(
     (customerData: Omit<CustomerAccount, 'id' | 'createdAt'>): CustomerAccount => {
@@ -505,56 +782,55 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       );
       addActivityLog({
         actionType: 'customer_update',
-        description: `Updated customer profile ID #${id}.`
+        description: `Updated customer profile #${id}.`,
+        targetId: id
       });
     },
     [addActivityLog]
   );
 
   const deleteCustomer = useCallback(
-    (id: string) => {
-      const toDelete = customers.find((c) => c.id === id);
+    (id: string): boolean => {
       setCustomers((prev) => prev.filter((c) => c.id !== id));
-      if (toDelete) {
-        addActivityLog({
-          actionType: 'customer_update',
-          description: `Deleted customer profile for ${toDelete.name}.`
-        });
-      }
+      addActivityLog({
+        actionType: 'customer_update',
+        description: `Deleted customer record #${id}.`
+      });
       return true;
     },
-    [customers, addActivityLog]
+    [addActivityLog]
   );
 
   const awardLoyaltyPoints = useCallback(
-    (customerId: string, pointsDelta: number, reason?: string) => {
+    (customerId: string, pointsDelta: number, reason = 'Bonus allocation') => {
       setCustomers((prev) =>
         prev.map((c) => {
-          if (c.id !== customerId) return c;
-          const newPts = Math.max(0, c.loyaltyPoints + pointsDelta);
-          let newTier: 'Bronze' | 'Silver' | 'Gold' | 'Platinum' = c.loyaltyTier;
-          if (newPts >= 2000) newTier = 'Platinum';
-          else if (newPts >= 1000) newTier = 'Gold';
-          else if (newPts >= 500) newTier = 'Silver';
-          else newTier = 'Bronze';
+          if (c.id === customerId) {
+            const nextPts = Math.max(0, c.loyaltyPoints + pointsDelta);
+            let tier: 'Bronze' | 'Silver' | 'Gold' | 'Platinum' = 'Bronze';
+            if (nextPts >= 2000) tier = 'Platinum';
+            else if (nextPts >= 1000) tier = 'Gold';
+            else if (nextPts >= 500) tier = 'Silver';
 
-          return {
-            ...c,
-            loyaltyPoints: newPts,
-            loyaltyTier: newTier
-          };
+            return {
+              ...c,
+              loyaltyPoints: nextPts,
+              loyaltyTier: tier
+            };
+          }
+          return c;
         })
       );
-      const cust = customers.find((c) => c.id === customerId);
       addActivityLog({
         actionType: 'customer_update',
-        description: `Awarded ${pointsDelta >= 0 ? '+' : ''}${pointsDelta} loyalty points to ${cust?.name || customerId} (${reason || 'Manual Adjustment'}).`
+        description: `Awarded ${pointsDelta >= 0 ? `+${pointsDelta}` : pointsDelta} loyalty points to customer #${customerId} (${reason}).`,
+        targetId: customerId
       });
     },
-    [customers, addActivityLog]
+    [addActivityLog]
   );
 
-  // Supplier & PO Management
+  // Suppliers & Purchase Orders
   const addSupplier = useCallback(
     (supplierData: Omit<Supplier, 'id'>): Supplier => {
       const newSup: Supplier = {
@@ -578,25 +854,23 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       );
       addActivityLog({
         actionType: 'supplier_po',
-        description: `Updated supplier details for ID #${id}.`
+        description: `Updated supplier profile #${id}.`,
+        targetId: id
       });
     },
     [addActivityLog]
   );
 
   const deleteSupplier = useCallback(
-    (id: string) => {
-      const toDelete = suppliers.find((s) => s.id === id);
+    (id: string): boolean => {
       setSuppliers((prev) => prev.filter((s) => s.id !== id));
-      if (toDelete) {
-        addActivityLog({
-          actionType: 'supplier_po',
-          description: `Deleted supplier entry: ${toDelete.name}.`
-        });
-      }
+      addActivityLog({
+        actionType: 'supplier_po',
+        description: `Deleted supplier record #${id}.`
+      });
       return true;
     },
-    [suppliers, addActivityLog]
+    [addActivityLog]
   );
 
   const addPurchaseOrder = useCallback(
@@ -635,7 +909,6 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const targetPO = purchaseOrders.find((p) => p.id === poId);
       if (!targetPO || targetPO.status === 'received') return;
 
-      // Update PO status
       setPurchaseOrders((prev) =>
         prev.map((po) =>
           po.id === poId
@@ -644,7 +917,6 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         )
       );
 
-      // Auto-increment inventory stock if matched
       targetPO.items.forEach((item) => {
         if (item.productId) {
           setInventory((prevInv) =>
@@ -666,7 +938,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       addActivityLog({
         actionType: 'supplier_po',
-        description: `Received PO #${targetPO.poNumber} from ${targetPO.supplierName}. Inventory replenished automatically.`,
+        description: `Received PO #${targetPO.poNumber} from ${targetPO.supplierName}. Stock replenished.`,
         targetId: targetPO.id
       });
 
@@ -691,12 +963,100 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [addActivityLog]
   );
 
+  // Unified 'Create New Item' in Inventory & Storefront Catalog
+  const createInventoryAndProductItem = useCallback(
+    (payload: CreateItemPayload): { inventoryItem: InventoryItem; productItem: ProductItem } => {
+      const baseSlug = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const uniqueSuffix = Date.now().toString().slice(-4);
+      const productId = `prod-${baseSlug}-${uniqueSuffix}`;
+      const inventoryId = `inv-${baseSlug}-${uniqueSuffix}`;
+
+      // 1. Create Product Item for Storefront
+      const newProduct: ProductItem = {
+        id: productId,
+        name: payload.name,
+        tagline: `${payload.name} — Fresh farm harvest from Kaduna.`,
+        category: payload.category,
+        badge: payload.badge || (payload.currentStock > 50 ? 'In Stock Daily' : 'Fresh Harvest'),
+        description: payload.description || `Freshly harvested ${payload.name} produced under strict quality and bio-sanitary standards at YIFA Farms in Kaduna.`,
+        features: payload.features && payload.features.length > 0
+          ? payload.features
+          : [
+              `Freshly harvested in Kaduna State`,
+              `100% natural with rigorous quality inspection`,
+              `Supplied per ${payload.unit} for retail & wholesale`,
+              `Direct farm-gate dispatch to your location`
+            ],
+        specs: {
+          unit: payload.unit,
+          packaging: payload.packaging || `Ventilated agro-packaging / crates`,
+          shelfLife: payload.shelfLifeDays ? `${payload.shelfLifeDays} days in optimal storage` : '1–2 weeks cool storage',
+          minOrder: payload.minOrder || `1 ${payload.unit}`,
+          availability: payload.currentStock > 0 ? 'In Stock' : 'Out of Stock (Restocking)',
+          estimatedPrice: `₦${payload.unitPrice.toLocaleString()}`,
+          isPriceConfirmed: true,
+          unitPrice: payload.unitPrice,
+          wholesalePrice: payload.wholesalePrice || payload.unitPrice
+        },
+        image: payload.image
+      };
+
+      // 2. Create Inventory Item for Operations
+      const newInventory: InventoryItem = {
+        id: inventoryId,
+        productId: productId,
+        name: payload.name,
+        category: payload.category,
+        currentStock: payload.currentStock,
+        unit: payload.unit,
+        lowStockThreshold: payload.lowStockThreshold || 10,
+        reorderLevel: Math.round(payload.lowStockThreshold * 1.5),
+        unitCost: payload.unitCost || Math.round(payload.unitPrice * 0.75),
+        unitPrice: payload.unitPrice,
+        wholesalePrice: payload.wholesalePrice || payload.unitPrice,
+        lastRestocked: 'Just now (New Item)',
+        status: payload.currentStock === 0 ? 'out_of_stock' : payload.currentStock <= payload.lowStockThreshold ? 'low_stock' : 'in_stock',
+        image: payload.image,
+        description: payload.description,
+        batchNumber: `BATCH-${new Date().getFullYear()}-${uniqueSuffix}`,
+        harvestDate: payload.harvestDate || 'Today',
+        shelfLifeDays: payload.shelfLifeDays || 14,
+        freshnessStatus: 'freshly_harvested'
+      };
+
+      // 3. Atomically update state
+      setInventory((prev) => [newInventory, ...prev]);
+      setProducts((prev) => [newProduct, ...prev]);
+
+      // 4. Log and notify
+      addActivityLog({
+        actionType: 'product_created',
+        description: `Created new item "${payload.name}" in Inventory (Stock: ${payload.currentStock} ${payload.unit}) and published to Storefront catalog (₦${payload.unitPrice.toLocaleString()}).`,
+        targetId: inventoryId
+      });
+
+      addNotification({
+        type: 'product_updated',
+        title: `New Product Created: ${payload.name}`,
+        message: `Item added to inventory with ${payload.currentStock} ${payload.unit} stock and published live to public catalog.`
+      });
+
+      return { inventoryItem: newInventory, productItem: newProduct };
+    },
+    [addActivityLog, addNotification]
+  );
+
   // Unified Inventory Updates
   const updateInventoryStock = useCallback(
     (inventoryId: string, deltaOrExact: number, isDelta = false, reason = 'Manual Adjustment') => {
+      let targetProdId = '';
+      let targetName = '';
+
       setInventory((prev) =>
         prev.map((item) => {
           if (item.id === inventoryId) {
+            targetProdId = item.productId;
+            targetName = item.name;
             const nextStock = Math.max(0, isDelta ? item.currentStock + deltaOrExact : deltaOrExact);
             const status =
               nextStock === 0
@@ -705,12 +1065,11 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 ? 'low_stock'
                 : 'in_stock';
 
-            // Check if this went low
             if (nextStock <= item.lowStockThreshold && item.currentStock > item.lowStockThreshold) {
               addNotification({
                 type: 'low_stock',
                 title: `Low Stock Alert: ${item.name}`,
-                message: `Remaining stock is ${nextStock} ${item.unit} (Below ${item.lowStockThreshold} ${item.unit} threshold).`,
+                message: `Remaining stock is ${nextStock} ${item.unit} (Below ${item.lowStockThreshold} threshold).`,
                 inventoryId: item.id
               });
             }
@@ -726,10 +1085,29 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         })
       );
 
-      const target = inventory.find((i) => i.id === inventoryId);
+      // Sync storefront product availability
+      if (targetProdId) {
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id === targetProdId) {
+              const currentInv = inventory.find((i) => i.id === inventoryId);
+              const nextStock = Math.max(0, isDelta ? (currentInv?.currentStock || 0) + deltaOrExact : deltaOrExact);
+              return {
+                ...p,
+                specs: {
+                  ...p.specs,
+                  availability: nextStock > 0 ? 'In Stock' : 'Out of Stock (Restocking)'
+                }
+              };
+            }
+            return p;
+          })
+        );
+      }
+
       addActivityLog({
         actionType: 'inventory_update',
-        description: `Adjusted stock for ${target?.name || inventoryId}: ${isDelta ? (deltaOrExact >= 0 ? `+${deltaOrExact}` : deltaOrExact) : `Set to ${deltaOrExact}`} (${reason}).`,
+        description: `Adjusted stock for ${targetName || inventoryId}: ${isDelta ? (deltaOrExact >= 0 ? `+${deltaOrExact}` : deltaOrExact) : `Set to ${deltaOrExact}`} (${reason}).`,
         targetId: inventoryId
       });
     },
@@ -738,9 +1116,12 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updateInventoryPricing = useCallback(
     (inventoryId: string, unitPrice: number, wholesalePrice: number, unitCost?: number) => {
+      let targetProdId = '';
+
       setInventory((prev) =>
         prev.map((item) => {
           if (item.id === inventoryId) {
+            targetProdId = item.productId;
             return {
               ...item,
               unitPrice,
@@ -751,13 +1132,110 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           return item;
         })
       );
+
+      // Instantly reflect updated price on storefront catalog
+      if (targetProdId) {
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id === targetProdId) {
+              return {
+                ...p,
+                specs: {
+                  ...p.specs,
+                  unitPrice,
+                  wholesalePrice,
+                  estimatedPrice: `₦${unitPrice.toLocaleString()}`,
+                  isPriceConfirmed: true
+                }
+              };
+            }
+            return p;
+          })
+        );
+      }
+
       addActivityLog({
         actionType: 'inventory_update',
-        description: `Updated pricing for inventory ID #${inventoryId} (Retail: ₦${unitPrice.toLocaleString()}, Wholesale: ₦${wholesalePrice.toLocaleString()}).`,
+        description: `Updated pricing for inventory #${inventoryId} (Retail: ₦${unitPrice.toLocaleString()}, Wholesale: ₦${wholesalePrice.toLocaleString()}).`,
         targetId: inventoryId
       });
     },
     [addActivityLog]
+  );
+
+  const updateInventoryItemFull = useCallback(
+    (inventoryId: string, updates: Partial<InventoryItem>) => {
+      let targetProdId = '';
+
+      setInventory((prev) =>
+        prev.map((item) => {
+          if (item.id === inventoryId) {
+            targetProdId = item.productId;
+            return {
+              ...item,
+              ...updates,
+              status: updates.currentStock !== undefined
+                ? (updates.currentStock === 0 ? 'out_of_stock' : updates.currentStock <= (updates.lowStockThreshold || item.lowStockThreshold) ? 'low_stock' : 'in_stock')
+                : item.status
+            };
+          }
+          return item;
+        })
+      );
+
+      // Sync storefront product details (image, name, description, category, unitPrice)
+      if (targetProdId) {
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id === targetProdId) {
+              return {
+                ...p,
+                ...(updates.name && { name: updates.name }),
+                ...(updates.category && { category: updates.category }),
+                ...(updates.image && { image: updates.image }),
+                ...(updates.description && { description: updates.description }),
+                specs: {
+                  ...p.specs,
+                  ...(updates.unit && { unit: updates.unit }),
+                  ...(updates.unitPrice && {
+                    unitPrice: updates.unitPrice,
+                    estimatedPrice: `₦${updates.unitPrice.toLocaleString()}`
+                  }),
+                  ...(updates.wholesalePrice && { wholesalePrice: updates.wholesalePrice }),
+                  ...(updates.currentStock !== undefined && {
+                    availability: updates.currentStock > 0 ? 'In Stock' : 'Out of Stock'
+                  })
+                }
+              };
+            }
+            return p;
+          })
+        );
+      }
+
+      addActivityLog({
+        actionType: 'inventory_update',
+        description: `Updated full specifications and photo for item #${inventoryId}.`,
+        targetId: inventoryId
+      });
+    },
+    [addActivityLog]
+  );
+
+  const deleteInventoryItem = useCallback(
+    (inventoryId: string): boolean => {
+      const target = inventory.find((i) => i.id === inventoryId);
+      if (target?.productId) {
+        setProducts((prev) => prev.filter((p) => p.id !== target.productId));
+      }
+      setInventory((prev) => prev.filter((i) => i.id !== inventoryId));
+      addActivityLog({
+        actionType: 'inventory_update',
+        description: `Deleted inventory item #${inventoryId}.`
+      });
+      return true;
+    },
+    [inventory, addActivityLog]
   );
 
   const updateInventoryFreshness = useCallback(
@@ -796,7 +1274,6 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     order.items.forEach((orderItem) => {
       setInventory((prevInv) =>
         prevInv.map((invItem) => {
-          // match either by productId or by id
           if (invItem.productId === orderItem.productId || invItem.id === orderItem.productId) {
             const nextStock = Math.max(0, invItem.currentStock - orderItem.quantity);
             const status =
@@ -822,7 +1299,7 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     async (orderData: Partial<UnifiedOrder>): Promise<{ success: boolean; id: string; order: UnifiedOrder }> => {
       const generatedId = `YIFA-${Math.floor(1000 + Math.random() * 9000)}`;
       const now = new Date();
-      
+
       const newOrder: UnifiedOrder = {
         id: generatedId,
         customerName: orderData.customerName || 'Valued Customer',
@@ -865,13 +1342,15 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // 2. Automatically deduct inventory
       deductInventoryForOrder(newOrder);
 
-      // 3. Auto sync/update Customer account & loyalty points
+      // 3. Auto sync Customer account & loyalty points
       setCustomers((prevCusts) => {
         const existingIndex = prevCusts.findIndex(
-          (c) => c.phone.replace(/\D/g, '') === newOrder.phone.replace(/\D/g, '') || (newOrder.email && c.email === newOrder.email)
+          (c) =>
+            c.phone.replace(/\D/g, '') === newOrder.phone.replace(/\D/g, '') ||
+            (newOrder.email && c.email === newOrder.email)
         );
 
-        const earnedPoints = Math.round(newOrder.totalAmount / 1000); // 1 point per ₦1,000
+        const earnedPoints = Math.round(newOrder.totalAmount / 1000);
 
         if (existingIndex >= 0) {
           const cust = prevCusts[existingIndex];
@@ -901,7 +1380,6 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           newArr[existingIndex] = updatedCust;
           return newArr;
         } else {
-          // Create new customer record
           const newCust: CustomerAccount = {
             id: `cust-${Date.now()}`,
             name: newOrder.customerName,
@@ -921,11 +1399,11 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       });
 
-      // 4. Trigger Real-time Notification
+      // 4. Trigger Real-time Notification & Chime
       addNotification({
         type: 'new_order',
-        title: `New Order: #${newOrder.id}`,
-        message: `${newOrder.customerName} placed an order for ₦${newOrder.totalAmount.toLocaleString()} (${newOrder.items.length} items).`,
+        title: `New Storefront Order: #${newOrder.id}`,
+        message: `${newOrder.customerName} ordered ₦${newOrder.totalAmount.toLocaleString()} (${newOrder.items.length} items) for delivery to ${newOrder.deliveryAddress}.`,
         orderId: newOrder.id
       });
 
@@ -978,18 +1456,17 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       addActivityLog({
         actionType: 'order_status',
-        description: `Changed order #${orderId} status to '${status.toUpperCase()}'${options?.driver ? ` (Assigned: ${options.driver})` : ''}.`,
+        description: `Changed order #${orderId} status to '${status.toUpperCase()}'${options?.driver ? ` (Driver: ${options.driver})` : ''}.`,
         orderId
       });
 
       addNotification({
         type: 'status_change',
-        title: `Order #${orderId} Status Updated`,
+        title: `Order #${orderId} Updated to ${status.toUpperCase()}`,
         message: `Order for ${targetOrder?.customerName || 'Customer'} marked as ${status.toUpperCase()}.`,
         orderId
       });
 
-      // Send automated notification on dispatch or delivery
       if (status === 'dispatched') {
         sendAutomatedNotification(orderId, 'sms', 'dispatched');
       } else if (status === 'delivered') {
@@ -1016,13 +1493,13 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       addActivityLog({
         actionType: 'bulk_action',
-        description: `Bulk updated ${orderIds.length} orders to status '${newStatus.toUpperCase()}'.`
+        description: `Bulk updated ${orderIds.length} orders to '${newStatus.toUpperCase()}'.`
       });
 
       addNotification({
         type: 'status_change',
-        title: `Bulk Order Status Updated`,
-        message: `${orderIds.length} orders were updated to ${newStatus.toUpperCase()}.`
+        title: `Bulk Status: ${orderIds.length} Orders Updated`,
+        message: `Selected orders moved to status ${newStatus.toUpperCase()}.`
       });
     },
     [addActivityLog, addNotification]
@@ -1056,179 +1533,117 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     (orderId: string): UnifiedOrder | undefined => {
       return orders.find(
         (o) =>
-          o.id.toLowerCase() === orderId.toLowerCase() ||
-          o.id.replace(/\D/g, '') === orderId.replace(/\D/g, '')
+          o.id.toUpperCase() === orderId.toUpperCase() ||
+          o.id.replace('YIFA-', '').toUpperCase() === orderId.replace('YIFA-', '').toUpperCase()
       );
     },
     [orders]
   );
 
-  // Legacy Quote Submission
-  const submitQuote = async (quote: QuoteRequest): Promise<{ success: boolean; id: string }> => {
-    const quoteId = `YIFA-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newQuoteRecord: QuoteRequest = {
-      ...quote,
-      id: quoteId,
-      createdAt: new Date().toISOString(),
-      status: 'new'
-    };
-
-    setQuotesList((prev) => [newQuoteRecord, ...prev]);
-
-    // Also automatically create a UnifiedOrder
-    let unitPrice = 4200;
-    let prodId = 'fresh-eggs';
-    if (quote.productCategory === 'Frozen Chicken') {
-      unitPrice = 4200;
-      prodId = 'frozen-chicken';
-    } else if (quote.productCategory === 'Fish') {
-      unitPrice = 3050;
-      prodId = 'aquaculture-catfish';
-    } else if (quote.productCategory === 'Rams & Goats') {
-      unitPrice = 48000;
-      prodId = 'northern-rams-goats';
-    } else if (quote.productCategory === 'Vegetables') {
-      unitPrice = 8500;
-      prodId = 'fresh-vegetables';
-    } else if (quote.productCategory === 'Live Poultry') {
-      unitPrice = 3950;
-      prodId = 'live-birds-poultry';
-    }
-
-    const subtotal = quote.quantity * unitPrice;
-    const deliveryFee = 2500;
-    const totalAmount = subtotal + deliveryFee;
-
-    const mappedCustomerType: UnifiedOrder['customerType'] =
-      quote.customerType.toLowerCase().includes('caterer')
-        ? 'caterer'
-        : quote.customerType.toLowerCase().includes('hotel')
-        ? 'hotel'
-        : quote.customerType.toLowerCase().includes('wholesaler')
-        ? 'wholesaler'
-        : 'household';
-
-    await addOrder({
-      customerName: quote.fullName,
-      phone: quote.phoneOrWhatsapp,
-      whatsapp: quote.phoneOrWhatsapp,
-      email: quote.email || '',
-      customerType: mappedCustomerType,
-      deliveryAddress: quote.deliveryLocation,
-      items: [
-        {
-          productId: prodId,
-          name: `${quote.productCategory} (${quote.specificItem})`,
-          category: prodId,
-          quantity: quote.quantity,
-          unit: quote.unit,
-          unitPrice,
-          totalPrice: subtotal
-        }
-      ],
-      subtotal,
-      discount: 0,
-      deliveryFee,
-      totalAmount,
-      status: 'pending',
-      paymentStatus: 'Pending',
-      paymentMethod: 'Bank Transfer / WhatsApp Quote',
-      notes: quote.message ? `Quote Note: ${quote.message} (Frequency: ${quote.frequency})` : `Frequency: ${quote.frequency}`,
-      source: 'storefront'
-    });
-
-    return { success: true, id: quoteId };
-  };
-
   // Staff & RBAC
-  const loginStaff = (email: string, password = 'admin') => {
-    const user = staffAccounts.find(
-      (s) => s.email.toLowerCase() === email.trim().toLowerCase()
-    );
-    if (!user) {
-      return { success: false, message: 'Invalid credentials. Staff account not found.' };
-    }
-    if (user.status !== 'active') {
-      return { success: false, message: 'This staff account is currently inactive.' };
-    }
-    // Update lastLogin
-    const updatedUser = { ...user, lastLogin: 'Just now' };
-    setCurrentStaffUser(updatedUser);
-    setStaffAccounts((prev) =>
-      prev.map((s) => (s.id === user.id ? updatedUser : s))
-    );
+  const loginStaff = useCallback(
+    (email: string, password?: string): { success: boolean; message?: string; user?: StaffMember } => {
+      const match = staffAccounts.find(
+        (s) => s.email.toLowerCase() === email.toLowerCase().trim()
+      );
 
-    addActivityLog({
-      actionType: 'staff_change',
-      description: `${user.fullName} (${user.role.toUpperCase()}) signed in to the admin portal.`
-    });
+      if (!match) {
+        return { success: false, message: 'No staff account found with this email.' };
+      }
 
-    return { success: true, user: updatedUser };
-  };
+      if (match.status === 'inactive') {
+        return { success: false, message: 'This staff account has been deactivated.' };
+      }
 
-  const logoutStaff = () => {
+      const updatedUser: StaffMember = {
+        ...match,
+        lastLogin: 'Just now'
+      };
+
+      setCurrentStaffUser(updatedUser);
+      setStaffAccounts((prev) =>
+        prev.map((s) => (s.id === match.id ? updatedUser : s))
+      );
+
+      addActivityLog({
+        actionType: 'staff_change',
+        description: `${updatedUser.fullName} (${updatedUser.role}) logged in.`
+      });
+
+      return { success: true, user: updatedUser };
+    },
+    [staffAccounts, addActivityLog]
+  );
+
+  const logoutStaff = useCallback(() => {
     if (currentStaffUser) {
       addActivityLog({
         actionType: 'staff_change',
-        description: `${currentStaffUser.fullName} signed out.`
+        description: `${currentStaffUser.fullName} logged out.`
       });
     }
     setCurrentStaffUser(null);
-  };
+  }, [currentStaffUser, addActivityLog]);
 
-  const addStaffAccount = (staff: Omit<StaffMember, 'id' | 'createdAt'>) => {
-    const newStaff: StaffMember = {
-      ...staff,
-      id: `staff-${Date.now()}`,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    setStaffAccounts((prev) => [newStaff, ...prev]);
-    addActivityLog({
-      actionType: 'staff_change',
-      description: `Provisioned new staff account: ${newStaff.fullName} (${newStaff.role.toUpperCase()}).`
-    });
-  };
-
-  const updateStaffAccount = (id: string, updates: Partial<StaffMember>) => {
-    setStaffAccounts((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
-    );
-    if (currentStaffUser?.id === id) {
-      setCurrentStaffUser((prev) => (prev ? { ...prev, ...updates } : null));
-    }
-    addActivityLog({
-      actionType: 'staff_change',
-      description: `Updated staff profile ID #${id}.`
-    });
-  };
-
-  const deleteStaffAccount = (id: string): boolean => {
-    if (staffAccounts.length <= 1) return false;
-    const toDelete = staffAccounts.find((s) => s.id === id);
-    setStaffAccounts((prev) => prev.filter((s) => s.id !== id));
-    if (toDelete) {
+  const addStaffAccount = useCallback(
+    (staffData: Omit<StaffMember, 'id' | 'createdAt'>) => {
+      const newStaff: StaffMember = {
+        id: `staff-${Date.now()}`,
+        createdAt: new Date().toISOString().split('T')[0],
+        ...staffData
+      };
+      setStaffAccounts((prev) => [newStaff, ...prev]);
       addActivityLog({
         actionType: 'staff_change',
-        description: `Deleted staff profile: ${toDelete.fullName}.`
+        description: `Created staff account for ${newStaff.fullName} (${newStaff.role}).`
       });
-    }
-    return true;
-  };
+    },
+    [addActivityLog]
+  );
 
+  const updateStaffAccount = useCallback(
+    (id: string, updates: Partial<StaffMember>) => {
+      setStaffAccounts((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+      );
+      if (currentStaffUser && currentStaffUser.id === id) {
+        setCurrentStaffUser((prev) => (prev ? { ...prev, ...updates } : null));
+      }
+      addActivityLog({
+        actionType: 'staff_change',
+        description: `Updated staff permissions for ID #${id}.`,
+        targetId: id
+      });
+    },
+    [currentStaffUser, addActivityLog]
+  );
+
+  const deleteStaffAccount = useCallback(
+    (id: string): boolean => {
+      setStaffAccounts((prev) => prev.filter((s) => s.id !== id));
+      addActivityLog({
+        actionType: 'staff_change',
+        description: `Removed staff account #${id}.`
+      });
+      return true;
+    },
+    [addActivityLog]
+  );
+
+  // Storefront Config updates
   const updateConfig = (newConfig: Partial<FarmConfig>) => {
     setConfig((prev) => ({ ...prev, ...newConfig }));
   };
 
   const resetConfig = () => {
     setConfig(initialFarmConfig);
-    localStorage.removeItem(STORAGE_KEY);
   };
 
   const toggleBadgeVisibility = () => {
     setConfig((prev) => ({ ...prev, showClientBadges: !prev.showClientBadges }));
   };
 
-  // Real-time Sales Metrics calculation
+  // Sales Metrics calculations
   const salesMetrics: SalesMetrics = useMemo(() => {
     const now = Date.now();
     const oneDay = 24 * 3600 * 1000;
@@ -1298,6 +1713,15 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isConfigModalOpen,
         setIsConfigModalOpen,
         toggleBadgeVisibility,
+        products,
+        addProduct,
+        updateProduct,
+        deleteProduct,
+        inquiries,
+        unreadInquiriesCount,
+        submitInquiry,
+        updateInquiryStatus,
+        deleteInquiry,
         quotesList,
         submitQuote,
         orders,
@@ -1308,9 +1732,12 @@ export const FarmConfigProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         bulkDeleteOrders,
         getOrderById,
         inventory,
+        createInventoryAndProductItem,
         updateInventoryStock,
         updateInventoryPricing,
         updateInventoryFreshness,
+        updateInventoryItemFull,
+        deleteInventoryItem,
         lowStockCount,
         customers,
         addCustomer,

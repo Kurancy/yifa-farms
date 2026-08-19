@@ -15,13 +15,26 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   onClose,
   onSelectForQuote
 }) => {
-  const { config } = useFarmConfig();
+  const { config, submitInquiry } = useFarmConfig();
 
   if (!product) return null;
 
   const whatsappProductLink = `https://wa.me/${config.whatsappNumber}?text=${encodeURIComponent(
     `Hello YIFA Farms, I am inquiring about "${product.name}". Please share current pricing and delivery availability in Kaduna.`
   )}`;
+
+  const handleWhatsAppClick = () => {
+    submitInquiry({
+      fullName: 'Storefront Visitor',
+      phone: config.phoneDisplay,
+      channel: 'whatsapp',
+      subject: `Product Inquiry: ${product.name}`,
+      message: `Inquired about ${product.name} (${product.category}) from storefront detail modal.`,
+      productCategory: product.category,
+      specificItem: product.name,
+      priority: 'normal'
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -108,8 +121,14 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <span className="text-[#FDFBF5]/60 block font-medium">Availability:</span>
                 <span className="font-bold text-[#4EFA8B]">{product.specs.availability}</span>
               </div>
+              {product.specs.estimatedPrice && (
+                <div>
+                  <span className="text-[#FDFBF5]/60 block font-medium">Selling Price:</span>
+                  <span className="font-bold font-mono text-[#D4AF37]">{product.specs.estimatedPrice}</span>
+                </div>
+              )}
               {product.specs.shelfLife && (
-                <div className="col-span-2">
+                <div>
                   <span className="text-[#FDFBF5]/60 block font-medium">Recommended Storage:</span>
                   <span className="font-semibold text-[#FDFBF5]">{product.specs.shelfLife}</span>
                 </div>
@@ -140,6 +159,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               href={whatsappProductLink}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={handleWhatsAppClick}
               className="py-3.5 px-6 rounded-full bg-[#4A7C59] hover:bg-[#5A8C69] text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
             >
               <MessageCircle className="w-4 h-4" />

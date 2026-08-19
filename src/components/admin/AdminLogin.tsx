@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useFarmConfig } from '../../context/FarmConfigContext';
 import { YifaLogo } from '../YifaLogo';
+import { ThemeToggle } from '../ThemeToggle';
 import { ShieldCheck, Lock, Mail, ArrowRight, UserCheck, AlertCircle, Eye, EyeOff, Sparkles, ArrowLeft } from 'lucide-react';
 
 interface AdminLoginProps {
@@ -52,8 +53,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToStorefront }) =>
         </button>
 
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="text-[11px] font-mono text-emerald-400/90 uppercase tracking-wider">Kaduna Node Online</span>
+          <span className="text-[11px] font-mono text-emerald-400/90 uppercase tracking-wider hidden sm:inline">Kaduna Node Online</span>
         </div>
       </div>
 

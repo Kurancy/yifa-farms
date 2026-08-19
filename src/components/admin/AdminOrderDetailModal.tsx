@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UnifiedOrder, OrderStatus, PaymentStatus } from '../../types';
 import { useFarmConfig } from '../../context/FarmConfigContext';
+import { useToast } from '../../context/ToastContext';
 import { YifaLogo } from '../YifaLogo';
 import {
   X,
@@ -37,6 +38,7 @@ export const AdminOrderDetailModal: React.FC<AdminOrderDetailModalProps> = ({
   onClose
 }) => {
   const { updateOrderStatus, config, sendAutomatedNotification, currentStaffUser } = useFarmConfig();
+  const toast = useToast();
 
   const [activeTab, setActiveTab] = useState<'details' | 'invoice' | 'whatsapp' | 'automated'>('details');
   const [currentStatus, setCurrentStatus] = useState<OrderStatus>(order?.status || 'pending');
@@ -51,19 +53,36 @@ export const AdminOrderDetailModal: React.FC<AdminOrderDetailModalProps> = ({
 
   if (!isOpen || !order) return null;
 
-  const handleSaveUpdates = () => {
-    updateOrderStatus(order.id, currentStatus, {
-      driver: driverName,
-      vehicleNote,
-      paymentStatus,
-      notes
-    });
+  const handleSaveUpdates = async () => {
+    if (currentStatus === 'cancelled' && order.status !== 'cancelled') {
+      const proceed = await toast.confirmAction({
+        title: 'Cancel Farm Consignment',
+        message: `Are you sure you want to cancel Order #${order.id} for ${order.customerName}? Inventory reservations will be adjusted.`,
+        confirmText: 'Yes, Cancel Order',
+        cancelText: 'Keep Active',
+        type: 'danger'
+      });
+      if (!proceed) return;
+    }
 
-    setIsSavedToast(true);
-    setTimeout(() => setIsSavedToast(false), 2500);
+    try {
+      updateOrderStatus(order.id, currentStatus, {
+        driver: driverName,
+        vehicleNote,
+        paymentStatus,
+        notes
+      });
+
+      toast.success(`Order #${order.id} updated to "${currentStatus}".`, 'Order Updated');
+      setIsSavedToast(true);
+      setTimeout(() => setIsSavedToast(false), 2500);
+    } catch {
+      toast.error('Failed to save order updates. Please try again.', 'Update Failed');
+    }
   };
 
   const handlePrintInvoice = () => {
+    toast.info('Opening Kaduna print waybill formatting...', 'Print Preview');
     window.print();
   };
 
@@ -85,9 +104,14 @@ export const AdminOrderDetailModal: React.FC<AdminOrderDetailModalProps> = ({
   const finalWaUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(getWhatsAppMessage())}`;
 
   const handleTriggerAutomatedPing = (channel: 'sms' | 'email') => {
-    sendAutomatedNotification(order.id, channel, currentStatus === 'dispatched' ? 'dispatched' : currentStatus === 'delivered' ? 'delivered' : 'order_confirmed');
-    setAutomatedSentMsg(`Automated ${channel.toUpperCase()} notification dispatched successfully!`);
-    setTimeout(() => setAutomatedSentMsg(null), 3000);
+    try {
+      sendAutomatedNotification(order.id, channel, currentStatus === 'dispatched' ? 'dispatched' : currentStatus === 'delivered' ? 'delivered' : 'order_confirmed');
+      toast.success(`Automated ${channel.toUpperCase()} dispatch alert transmitted to customer.`, 'Notification Dispatched');
+      setAutomatedSentMsg(`Automated ${channel.toUpperCase()} notification dispatched successfully!`);
+      setTimeout(() => setAutomatedSentMsg(null), 3000);
+    } catch {
+      toast.error(`Failed to send automated ${channel.toUpperCase()} alert.`, 'Gateway Error');
+    }
   };
 
   const getStatusBadge = (st: OrderStatus) => {

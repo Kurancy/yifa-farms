@@ -146,22 +146,7 @@ export const OrderStatusSection: React.FC = () => {
       <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#D4AF37]/5 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 relative z-10">
-        {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-14">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <span className="h-[1px] w-6 bg-[#D4AF37]"></span>
-            <span className="text-[#D4AF37] text-xs font-bold tracking-[0.25em] uppercase">
-              Live Logistics & Dispatch Tracking
-            </span>
-            <span className="h-[1px] w-6 bg-[#D4AF37]"></span>
-          </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#FDFBF5] tracking-tight uppercase">
-            Check Order & Delivery Status
-          </h2>
-          <p className="mt-3 text-base sm:text-lg text-[#FDFBF5]/75 leading-relaxed">
-            Enter your YIFA Farms invoice number or quote reference to track packing stages, Kaduna dispatch routes, and estimated delivery times.
-          </p>
-        </div>
+        
 
         {/* Search Bar & Quick Demo Chips */}
         <div className="max-w-3xl mx-auto mb-12">

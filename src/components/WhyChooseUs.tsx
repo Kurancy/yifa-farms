@@ -31,19 +31,7 @@ export const WhyChooseUs: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 relative z-10">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <span className="h-[1px] w-6 bg-[#D4AF37]"></span>
-            <span className="text-[#D4AF37] text-xs font-bold tracking-[0.25em] uppercase">Why Choose YIFA Farms</span>
-            <span className="h-[1px] w-6 bg-[#D4AF37]"></span>
-          </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#FDFBF5] tracking-tight uppercase">
-            Built on Real Agricultural Standards
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-[#FDFBF5]/75 leading-relaxed">
-            We don’t rely on buzzwords or unverified marketing gimmicks. We rely on clean feed, biosecure animal husbandry, strict grading, and dependable customer relationships.
-          </p>
-        </div>
+        
 
         {/* 6 Core Pillars Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">

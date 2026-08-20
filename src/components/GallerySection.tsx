@@ -35,18 +35,7 @@ export const GallerySection: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="h-[1px] w-6 bg-[#D4AF37]"></span>
-              <span className="text-[#D4AF37] text-xs font-bold tracking-[0.25em] uppercase">Visual Showcase</span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#FDFBF5] tracking-tight uppercase">
-              Farm Photo Gallery
-            </h2>
-            <p className="mt-3 text-base text-[#FDFBF5]/75 leading-relaxed">
-              Explore authentic glimpses of our layer coops, broiler rearing, early morning egg sorting, and irrigated vegetable rows in Kaduna.
-            </p>
-          </div>
+         
 
           {/* Gallery Filters */}
           <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-white/5 rounded-full border border-white/10 backdrop-blur-sm">

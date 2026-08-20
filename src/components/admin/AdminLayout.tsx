@@ -246,18 +246,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToStorefront }) 
   };
 
   return (
-    <div className="min-h-screen bg-[#071810] text-[#FDFBF5] flex font-sans relative antialiased selection:bg-[#D4AF37] selection:text-[#0D2B1D]">
+    <div className="h-screen h-[100dvh] w-screen overflow-hidden bg-[#071810] text-[#FDFBF5] flex font-sans relative antialiased selection:bg-[#D4AF37] selection:text-[#0D2B1D]">
       
       {/* ------------------------------------------------------------- */}
       {/* LEFT SIDEBAR NAVIGATION (Desktop & Collapsible) */}
       {/* ------------------------------------------------------------- */}
       <aside
-        className={`hidden lg:flex flex-col flex-shrink-0 z-30 bg-[#0D2B1D] border-r border-white/10 transition-all duration-300 relative select-none ${
+        className={`hidden lg:flex flex-col flex-shrink-0 h-full sticky top-0 left-0 z-30 bg-[#0D2B1D] border-r border-white/10 transition-all duration-300 select-none ${
           isSidebarCollapsed ? 'w-20' : 'w-64 xl:w-72'
         }`}
       >
         {/* Top of Sidebar: Yifa Farms Logo + Role Badge */}
-        <div className="p-4 border-b border-white/10 flex flex-col gap-3">
+        <div className="p-4 border-b border-white/10 flex flex-col gap-3 shrink-0">
           <div className="flex items-center justify-between">
             <div
               onClick={() => setActiveTab('overview')}
@@ -320,7 +320,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToStorefront }) 
         </div>
 
         {/* Main Navigation Items (Grouped with Section Labels) */}
-        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-5 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto py-4 px-3 space-y-5 custom-scrollbar">
           {navigationGroups.map((group, groupIdx) => (
             <div key={groupIdx} className="space-y-1">
               {!isSidebarCollapsed ? (
@@ -373,7 +373,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToStorefront }) 
         </div>
 
         {/* Bottom of Sidebar: Utilities, Storefront link & Profile */}
-        <div className="p-3 border-t border-white/10 bg-[#0A2217] space-y-2">
+        <div className="p-3 border-t border-white/10 bg-[#0A2217] space-y-2 shrink-0">
           {/* Quick Utility Row */}
           {!isSidebarCollapsed ? (
             <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#071810] rounded-xl border border-white/10">
@@ -466,7 +466,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToStorefront }) 
           {/* Drawer Content */}
           <div className="relative w-80 max-w-[85vw] bg-[#0D2B1D] border-r border-white/10 h-full flex flex-col z-10 shadow-2xl animate-in slide-in-from-left duration-200">
             {/* Drawer Header */}
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-1 rounded-xl bg-white/5 border border-white/10">
                   <YifaLogo variant="icon" size="sm" />
@@ -488,7 +488,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToStorefront }) 
             </div>
 
             {/* Mobile Nav Links */}
-            <div className="flex-1 overflow-y-auto py-4 px-3 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto py-4 px-3 space-y-4 custom-scrollbar">
               {navigationGroups.map((group, groupIdx) => (
                 <div key={groupIdx} className="space-y-1">
                   <div className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-widest px-3 py-1">
@@ -521,7 +521,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToStorefront }) 
             </div>
 
             {/* Mobile Drawer Footer */}
-            <div className="p-4 border-t border-white/10 bg-[#0A2217] space-y-3">
+            <div className="p-4 border-t border-white/10 bg-[#0A2217] space-y-3 shrink-0">
               <ThemeToggle variant="expanded" />
 
               <div className="flex items-center justify-between pt-2 border-t border-white/10 text-xs">
@@ -548,10 +548,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToStorefront }) 
       {/* ------------------------------------------------------------- */}
       {/* RIGHT MAIN AREA: SLIM TOP BAR + VIEWPORT */}
       {/* ------------------------------------------------------------- */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
         
         {/* Slim Top Bar (stays at top of content area) */}
-        <header className="sticky top-0 z-20 h-16 bg-[#0D2B1D]/95 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-4 sm:px-6 lg:px-8 shadow-sm">
+        <header className="sticky top-0 z-20 h-16 shrink-0 bg-[#0D2B1D]/95 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-4 sm:px-6 lg:px-8 shadow-sm">
           {/* Left Zone: Mobile Trigger + Page Title & Live Breadcrumb */}
           <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
             {/* Mobile Sidebar Hamburger Trigger */}
@@ -647,7 +647,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToStorefront }) 
         </header>
 
         {/* Main Content Viewport */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 custom-scrollbar">
+        <main className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 custom-scrollbar">
           <div className="max-w-7xl mx-auto">
             {activeTab === 'overview' && (
               <AdminDashboardOverview

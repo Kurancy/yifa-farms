@@ -151,16 +151,9 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {/* WhatsApp Direct Chat */}
-            <a
-              href={whatsappLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-[#25D366]/20 hover:bg-[#25D366] text-[#25D366] hover:text-slate-950 border border-[#25D366]/30 px-3 py-2 rounded-full text-xs font-bold tracking-wider uppercase transition-all shadow-sm whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 active:scale-95"
-              title="Chat with YIFA Farms Logistics Desk on WhatsApp"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span className="hidden xl:inline">WhatsApp</span>
-            </a>
+            
+             
+            
 
             {/* Request Order / Quote Button */}
             <button

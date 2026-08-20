@@ -55,13 +55,13 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, onOpenQuote, onSelectCat
             {/* Main Headline strictly matching Sophisticated Dark design */}
             <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-[0.95] mb-6 uppercase text-white drop-shadow-md">
               QUALITY FOOD.<br />
-              <span className="text-[#4A7C59]">GROWN WITH</span><br />
-              PURPOSE.
+              <span className="text-[#4A7C59]">GROWN WITH PURPOSE</span><br />
+              FROM OUR FARM TO YOUR TABLE.
             </h1>
 
             {/* Subtext highlighting all key farm specialities */}
             <p className="max-w-xl text-base sm:text-lg text-[#FDFBF5]/90 leading-relaxed mb-6 font-normal drop-shadow-sm">
-              Founded by Abubakar Ibrahim, <strong className="text-[#FDFBF5] font-bold">YIFA Farms</strong> supplies trusted poultry, fresh eggs, prime rams, goats, aquaculture fish, and field vegetables directly from our farm in Kaduna.
+              Real food from a real farm. <strong className="text-[#FDFBF5] font-bold">YIFA Farms</strong>  supplies fresh eggs, poultry, rams, goats, catfish, and vegetables — raised with care, delivered with pride.
             </p>
 
             {/* Tagline highlight */}

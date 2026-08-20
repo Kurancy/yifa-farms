@@ -182,13 +182,7 @@ export const productsData: ProductItem[] = [
 ];
 
 export const facilitiesData = [
-  {
-    id: "poultry-pens",
-    title: "Ventilated Layer & Broiler Housing",
-    description: "Engineered poultry pens designed for Northern Nigerian climate with natural cross-ventilation, automated nipple drinkers, clean feeding troughs, and comfortable nesting areas.",
-    metric: "Biosecure Rearing",
-    image: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?auto=format&fit=crop&w=1000&q=80"
-  },
+
   {
     id: "egg-grading",
     title: "Sanitary Egg Collection & Sorting",
@@ -350,14 +344,6 @@ export const galleryItems: GalleryItem[] = [
     image: "https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&w=1200&q=80",
     isClientPlaceholder: true
   },
-  {
-    id: "gal-8",
-    title: "Vibrant Healthy Broiler Flock",
-    category: "poultry",
-    description: "Well-fed broilers achieving optimal meat ratio under vet supervision.",
-    image: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?auto=format&fit=crop&w=1200&q=80",
-    isClientPlaceholder: true
-  }
 ];
 
 export const kadunaLocations = [

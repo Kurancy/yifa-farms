@@ -1,5 +1,7 @@
 import React from 'react';
 import { useFarmConfig } from '../context/FarmConfigContext';
+import pic1 from "../assets/images/pic1.jpg";
+import pic2 from "../assets/images/pic2.jpg";
 import { Calendar, User, MapPin, Award, CheckCircle2, ShieldCheck, HeartHandshake, Sprout } from 'lucide-react';
 import { ClientConfirmBadge } from './ClientConfirmBadge';
 
@@ -15,15 +17,11 @@ export const AboutSection: React.FC = () => {
         {/* Section Header */}
         <div className="max-w-3xl mb-16">
           <div className="flex items-center gap-2 mb-3">
-            <span className="h-[1px] w-6 bg-[#D4AF37]"></span>
-            <span className="text-[#D4AF37] text-xs font-bold tracking-[0.25em] uppercase">Our Agribusiness Heritage</span>
+            
+            
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#FDFBF5] tracking-tight uppercase">
-            Rooted in Kaduna. Built on Integrity.
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-[#FDFBF5]/75 leading-relaxed">
-            Founded in {config.foundedYear} by <strong className="text-white font-semibold">{config.founderName}</strong>, YIFA Farms has grown from a passionate agricultural venture into a recognized supplier of wholesome poultry, fresh eggs, and quality vegetables in Kaduna State.
-          </p>
+          
+         
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -31,7 +29,7 @@ export const AboutSection: React.FC = () => {
           <div className="lg:col-span-5 space-y-6">
             <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/10">
               <img
-                src="https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&w=1000&q=80"
+                src={pic1}
                 alt="Agricultural supervisor inspecting crops and poultry"
                 className="w-full h-96 object-cover object-center filter brightness-90 contrast-110"
               />
